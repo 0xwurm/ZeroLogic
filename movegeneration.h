@@ -77,11 +77,15 @@ namespace ZeroLogic {
 		void initGenerate();
 		void initMasks();
 
+		void isolator(moveflags ctype);
+		void isolator(moveflags itype, Bitboard board, Move shiftedOrigin);
 		void isolator(moveflags itype, moveflags ctype, Direction direction, moveflags promocapture);
 
+		template<Check c>
+		void genknight();
 		void slider(Direction direction, PType type);
 		void sliderC(Direction direction, PType type);
-		void kinggen();
+		void genking();
 		void pawngen();
 		void pawngenC();
 		void sliderMask(Direction direction);

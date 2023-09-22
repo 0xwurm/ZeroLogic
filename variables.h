@@ -85,6 +85,11 @@ namespace ZeroLogic {
 
 	namespace Movegen {
 
+		enum Check : const bool {
+			check = true,
+			nocheck = false
+		};
+
 		enum PType {
 			none, diagonal, straight
 		};

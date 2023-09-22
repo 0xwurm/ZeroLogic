@@ -13,6 +13,8 @@ namespace ZeroLogic {
 		Move stringToNum(std::string m, Gamestate* gs);
 
 		void makeZobristKeys();
+		void makeKingLookup();
+		void makeKnightLookup();
 
 	};
 }

@@ -1,6 +1,13 @@
 #include "movegeneration.h"
 #include <iostream>
 
+namespace ZeroLogic {
+	namespace Movegen {
+		Bitboard kingLookup[64] = { 770, 1797, 3594, 7188, 14376, 28752, 57504, 49216, 197123, 460039, 920078, 1840156, 3680312, 7360624, 14721248, 12599488, 50463488, 117769984, 235539968, 471079936, 942159872, 1884319744, 3768639488, 3225468928, 12918652928, 30149115904, 60298231808, 120596463616, 241192927232, 482385854464, 964771708928, 825720045568, 3307175149568, 7718173671424, 15436347342848, 30872694685696, 61745389371392, 123490778742784, 246981557485568, 211384331665408, 846636838289408, 1975852459884544, 3951704919769088, 7903409839538176, 15806819679076352, 31613639358152704, 63227278716305408, 54114388906344448, 216739030602088448, 505818229730443264, 1011636459460886528, 2023272918921773056, 4046545837843546112, 8093091675687092224, 16186183351374184448, 13853283560024178688, 144959613005987840, 362258295026614272, 724516590053228544, 1449033180106457088, 2898066360212914176, 5796132720425828352, 11592265440851656704, 4665729213955833856 };
+		Bitboard knightLookup[64] = { 132096, 329728, 659712, 1319424, 2638848, 5277696, 10489856, 4202496, 33816580, 84410376, 168886289, 337772578, 675545156, 1351090312, 2685403152, 1075839008, 8657044482, 21609056261, 43234889994, 86469779988, 172939559976, 345879119952, 687463207072, 275414786112, 2216203387392, 5531918402816, 11068131838464, 22136263676928, 44272527353856, 88545054707712, 175990581010432, 70506185244672, 567348067172352, 1416171111120896, 2833441750646784, 5666883501293568, 11333767002587136, 22667534005174272, 45053588738670592, 18049583422636032, 145241105196122112, 362539804446949376, 725361088165576704, 1450722176331153408, 2901444352662306816, 5802888705324613632, 11533718717099671552, 4620693356194824192, 288234782788157440, 576469569871282176, 1224997833292120064, 2449995666584240128, 4899991333168480256, 9799982666336960512, 1152939783987658752, 2305878468463689728, 1128098930098176, 2257297371824128, 4796069720358912, 9592139440717824, 19184278881435648, 38368557762871296, 4679521487814656, 9077567998918656 };
+	}
+}
+
 using namespace ZeroLogic;
 using namespace Movegen;
 
@@ -87,6 +94,19 @@ void Movegenerator::isolator(moveflags itype, moveflags ctype, Direction directi
 		*(movelistRef + *movenum) = ctype | itype;
 		(*movenum)++;
 	}
+}
+
+void Movegenerator::isolator(moveflags ctype) { // castles
+	*(movelistRef + *movenum) = ctype | castles;
+	(*movenum)++;
+}
+
+void Movegenerator::isolator(moveflags itype, Bitboard board, Move shiftedOrigin) { // non-pawn moves
+	do {
+		*(movelistRef + *movenum) = shiftedOrigin | (_tzcnt_u64(board) << 4) | itype;
+		(*movenum)++;
+		board &= board - 1;
+	} while (board);
 }
 
 void Movegenerator::slider(Direction direction, PType type) {
@@ -293,32 +313,34 @@ bool Movegenerator::passantStraightLegal(Bitboard reversedNextBoard) {
 	}
 	else { return true; }
 }
-void Movegenerator::kinggen() {
-	nextBoard = ((king & west) << 1) & emptyorenemy & noCheck;
-	if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 1; isolator(capture, moveflags::none, x, moveflags::none); }
-	if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 1; isolator(normal, moveflags::none, x, moveflags::none); }
-	nextBoard = ((king & east) >> 1) & emptyorenemy & noCheck;
-	if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -1; isolator(capture, moveflags::none, x, moveflags::none); }
-	if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -1; isolator(normal, moveflags::none, x, moveflags::none); }
-	nextBoard = ((king & north) << 8) & emptyorenemy & noCheck;
-	if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 8; isolator(capture, moveflags::none, x, moveflags::none); }
-	if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 8; isolator(normal, moveflags::none, x, moveflags::none); }
-	nextBoard = ((king & south) >> 8) & emptyorenemy & noCheck;
-	if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -8; isolator(capture, moveflags::none, x, moveflags::none); }
-	if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -8; isolator(normal, moveflags::none, x, moveflags::none); }
-	nextBoard = ((king & northeast) << 7) & emptyorenemy & noCheck;
-	if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 7; isolator(capture, moveflags::none, x, moveflags::none); }
-	if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 7; isolator(normal, moveflags::none, x, moveflags::none); }
-	nextBoard = ((king & southwest) >> 7) & emptyorenemy & noCheck;
-	if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -7; isolator(capture, moveflags::none, x, moveflags::none); }
-	if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -7; isolator(normal, moveflags::none, x, moveflags::none); }
-	nextBoard = ((king & northwest) << 9) & emptyorenemy & noCheck;
-	if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 9; isolator(capture, moveflags::none, x, moveflags::none); }
-	if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 9; isolator(normal, moveflags::none, x, moveflags::none); }
-	nextBoard = ((king & southeast) >> 9) & emptyorenemy & noCheck;
-	if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -9; isolator(capture, moveflags::none, x, moveflags::none); }
-	if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -9; isolator(normal, moveflags::none, x, moveflags::none); }
+
+void Movegenerator::genking() {
+	Bitboard board = kingLookup[_tzcnt_u64(king)] & noCheck;
+	if (board & empty) isolator(normal, board & empty, _tzcnt_u64(king) << 10);
+	if (board & enemy) isolator(capture, board & enemy, _tzcnt_u64(king) << 10);
 }
+
+template<>
+void Movegenerator::genknight<nocheck>() {
+	Bitboard knightcopy = knights & notPinned;
+	while (knightcopy) {
+		Bitboard board = knightLookup[_tzcnt_u64(knightcopy)];
+		if (board & empty) isolator(normal, board & empty, _tzcnt_u64(knightcopy) << 10);
+		if (board & enemy) isolator(capture, board & enemy, _tzcnt_u64(knightcopy) << 10);
+		knightcopy &= knightcopy - 1;
+	}
+}
+template<>
+void Movegenerator::genknight<check>() {
+	Bitboard knightcopy = knights & notPinned;
+	while (knightcopy) {
+		Bitboard board = knightLookup[_tzcnt_u64(knightcopy)] & checkMask;
+		if (board & empty) isolator(normal, board & empty, _tzcnt_u64(knightcopy) << 10);
+		if (board & enemy) isolator(capture, board & enemy, _tzcnt_u64(knightcopy) << 10);
+		knightcopy &= knightcopy - 1;
+	}
+}
+
 void Movegenerator::pawngen() {
 
 	if (gsRef->white) {
@@ -1226,32 +1248,7 @@ void Movegenerator::generate() {
 		pawngen();
 
 		// n
-		piecesNotPinned = knights & notPinned;
-
-		nextBoard = ((piecesNotPinned & dll) >> 6) & emptyorenemy;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -6; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -6; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & urr) << 6) & emptyorenemy;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 6; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 6; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & drr) >> 10) & emptyorenemy;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -10; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -10; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & ull) << 10) & emptyorenemy;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 10; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 10; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & ddl) >> 15) & emptyorenemy;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -15; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -15; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & uur) << 15) & emptyorenemy;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 15; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 15; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & uul) << 17) & emptyorenemy;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 17; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 17; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & ddr) >> 17) & emptyorenemy;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -17; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -17; isolator(normal, moveflags::none, x, moveflags::none); }
+		genknight<nocheck>();
 
 		// q
 		piecesNotPinned = queens & notPinned;
@@ -1300,7 +1297,7 @@ void Movegenerator::generate() {
 		}
 
 		// k
-		kinggen();
+		genking();
 
 		// castling
 		if (gsRef->white) {
@@ -1318,7 +1315,7 @@ void Movegenerator::generate() {
 	}
 	else if (checkMask == full) { // double-check
 
-		kinggen();
+		genking();
 
 		if (*movenum == 0) { *movelistRef = checkmate; } // checkmate
 	}
@@ -1332,32 +1329,7 @@ void Movegenerator::generate() {
 		pawngenC();
 
 		// n
-		piecesNotPinned = knights & notPinned;
-
-		nextBoard = ((piecesNotPinned & dll) >> 6) & emptyorenemy & checkMask;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -6; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -6; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & urr) << 6) & emptyorenemy & checkMask;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 6; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 6; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & drr) >> 10) & emptyorenemy & checkMask;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -10; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -10; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & ull) << 10) & emptyorenemy & checkMask;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 10; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 10; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & ddl) >> 15) & emptyorenemy & checkMask;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -15; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -15; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & uur) << 15) & emptyorenemy & checkMask;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 15; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 15; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & uul) << 17) & emptyorenemy & checkMask;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = 17; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = 17; isolator(normal, moveflags::none, x, moveflags::none); }
-		nextBoard = ((piecesNotPinned & ddr) >> 17) & emptyorenemy & checkMask;
-		if (nextBoard & enemy) { toBeScanned = nextBoard & enemy; summand = -17; isolator(capture, moveflags::none, x, moveflags::none); }
-		if (nextBoard & empty) { toBeScanned = nextBoard & empty; summand = -17; isolator(normal, moveflags::none, x, moveflags::none); }
+		genknight<check>();
 
 		// q
 		piecesNotPinned = queens & notPinned;
@@ -1386,7 +1358,7 @@ void Movegenerator::generate() {
 		}
 
 		// k
-		kinggen();
+		genking();
 
 		if (*movenum == 0) { *movelistRef = checkmate; } // checkmate
 	}

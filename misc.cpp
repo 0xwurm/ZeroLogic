@@ -138,3 +138,39 @@ void Misc::makeZobristKeys() {
 	}
 
 }
+
+void Misc::makeKingLookup() {
+
+	for (int i = 0; i < 64; i++) {
+		Bitboard king = static_cast<Bitboard>(1) << i;
+		Bitboard legalMoves{};
+		legalMoves |= ((king & Movegen::west) << 1);
+		legalMoves |= ((king & Movegen::east) >> 1);
+		legalMoves |= ((king & Movegen::north) << 8);
+		legalMoves |= ((king & Movegen::south) >> 8);
+		legalMoves |= ((king & Movegen::northeast) << 7);
+		legalMoves |= ((king & Movegen::southwest) >> 7);
+		legalMoves |= ((king & Movegen::northwest) << 9);
+		legalMoves |= ((king & Movegen::southeast) >> 9);
+		std::cout << legalMoves << ", ";
+	}
+
+}
+
+void Misc::makeKnightLookup() {
+
+	for (int i = 0; i < 64; i++) {
+		Bitboard knight = static_cast<Bitboard>(1) << i;
+		Bitboard legalMoves{};
+		legalMoves |= ((knight & Movegen::dll) >> 6);
+		legalMoves |= ((knight & Movegen::urr) << 6);
+		legalMoves |= ((knight & Movegen::drr) >> 10);
+		legalMoves |= ((knight & Movegen::ull) << 10);
+		legalMoves |= ((knight & Movegen::ddl) >> 15);
+		legalMoves |= ((knight & Movegen::uur) << 15);
+		legalMoves |= ((knight & Movegen::uul) << 17);
+		legalMoves |= ((knight & Movegen::ddr) >> 17);
+		std::cout << legalMoves << ", ";
+	}
+
+}
