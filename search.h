@@ -21,7 +21,7 @@ namespace ZeroLogic {
 
 		void newsearch(SType mode, int depth);
 
-		void perft(Move m, int depth);
+		void newperft(int depth);
 
 		int bestmove(Move m, int depth, int alpha, int beta, std::stack<Move>* &pv, std::stack<Move>* lowerPv); // pv doesnt need to be pointer to reference?
 
@@ -36,6 +36,8 @@ namespace ZeroLogic {
 		void initID(int depth);
 
 		void sort(std::stack<Move>* &pv);
+
+		void perft(Move m, int depth);
 
 		bool stopFlag = false;
 

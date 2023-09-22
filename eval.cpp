@@ -52,15 +52,28 @@ int Eval::pawn<midgame>() {
 
 	int val = 0;
 
-	// pawnchains
-	Bitboard placeholder = g->position[wP];
-	for (int i = 1; i < 4 && placeholder; i++) { placeholder &= placeholder << 7; if (placeholder) val += (i * 5); }
-	placeholder = g->position[wP];
-	for (int i = 1; i < 4 && placeholder; i++) { placeholder &= placeholder << 9; if (placeholder) val += (i * 5); }
-	placeholder = g->position[bP];
-	for (int i = 1; i < 4 && placeholder; i++) { placeholder &= placeholder >> 7; if (placeholder) val -= (i * 5); }
-	placeholder = g->position[bP];
-	for (int i = 1; i < 4 && placeholder; i++) { placeholder &= placeholder >> 9; if (placeholder) val -= (i * 5); }
+#define chain(piece, shift, factor) g->position[piece] << (shift * factor)
+
+	// pawnchains (ignore borders)
+	val += 3 * __popcnt64(g->position[wP] & chain(wP, 7, 1));
+	val += 5 * __popcnt64(g->position[wP] & chain(wP, 7, 1) & chain(wP, 7, 2));
+	val += 10 * __popcnt64(g->position[wP] & chain(wP, 7, 1) & chain(wP, 7, 2) & chain(wP, 7, 3));
+	val += 3 * __popcnt64(g->position[wP] & chain(wP, 9, 1));
+	val += 5 * __popcnt64(g->position[wP] & chain(wP, 9, 1) & chain(wP, 9, 2));
+	val += 10 * __popcnt64(g->position[wP] & chain(wP, 9, 1) & chain(wP, 9, 2) & chain(wP, 9, 3));
+
+	val -= 3 * __popcnt64(g->position[bP] & chain(bP, 7, 1));
+	val -= 5 * __popcnt64(g->position[bP] & chain(bP, 7, 1) & chain(bP, 7, 2));
+	val -= 10 * __popcnt64(g->position[bP] & chain(bP, 7, 1) & chain(bP, 7, 2) & chain(bP, 7, 3));
+	val -= 3 * __popcnt64(g->position[bP] & chain(bP, 9, 1));
+	val -= 5 * __popcnt64(g->position[bP] & chain(bP, 9, 1) & chain(bP, 9, 2));
+	val -= 10 * __popcnt64(g->position[bP] & chain(bP, 9, 1) & chain(bP, 9, 2) & chain(bP, 9, 3));
+
+	// doubled pawns
+	val -= 10 * __popcnt64(g->position[wP] & chain(wP, 8, 1));
+	val += 10 * __popcnt64(g->position[bP] & chain(bP, 8, 1));
+
+#undef chain
 
 	return val;
 }
@@ -103,6 +116,32 @@ int Eval::pawn<endgame>() {
 		}
 
 	}
+
+	return val;
+
+}
+
+template<>
+int Eval::knight<opening>() {
+
+	int val = 0;
+
+	val += 20 * __popcnt64(g->position[wN] & extendedCenter);
+	val -= 20 * __popcnt64(g->position[bN] & extendedCenter);
+
+	return val;
+
+}
+
+template<>
+int Eval::bishop<opening>() {
+
+	int val = 0;
+
+	val += 15 * __popcnt64(g->position[wB] & middleStrip);
+	val -= 15 * __popcnt64(g->position[bB] & middleStrip);
+	val += 8 * __popcnt64(g->position[wB] & extendedStrip);
+	val -= 8 * __popcnt64(g->position[bB] & extendedStrip);
 
 	return val;
 
@@ -196,15 +235,17 @@ int Eval::positioning() {
 
 	if (!p) {
 		val += pawn<opening>();
-		// val += king<opening>();
+		val += king<opening>();
+		val += knight<opening>();
+		val += bishop<opening>();
 	}
 	else if (p == 1) {
 		val += pawn<midgame>();
-		// val += king<midgame>();
+		val += king<midgame>();
 	}
 	else {
 		val += pawn<endgame>();
-		// val += king<endgame>();
+		val += king<endgame>();
 	}
 
 	return val;
@@ -235,7 +276,7 @@ Phase Eval::phase() {
 	Bitboard all = 0;
 	for (int i = 0; i < 12; i++) all |= g->position[i];
 
-	if (__popcnt64(all & bigmid) >= 8 || !g->castlingRights[0] || !g->castlingRights[1] || !g->castlingRights[2] || !g->castlingRights[3] || pval() < 72) {
+	if (__popcnt64(all & bigmid) >= 8 || pval() < 72) {
 		if (__popcnt64(all) <= 10 || pval() < 20) return endgame;
 		else return midgame;
 	}

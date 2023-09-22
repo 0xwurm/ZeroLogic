@@ -1,5 +1,5 @@
 #pragma once
-#include "misc.h"
+#include "Gamestate.h"
 
 namespace ZeroLogic {
 
@@ -24,6 +24,8 @@ namespace ZeroLogic {
 		int pawn();
 		template <Phase p>
 		int knight();
+		template <Phase p>
+		int bishop();
 		template <Phase p>
 		int king();
 

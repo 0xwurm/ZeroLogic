@@ -1,6 +1,4 @@
 #include "gamestate.h"
-#include <iostream>
-#include "misc.h"
 
 using namespace ZeroLogic;
 using namespace State;
@@ -28,13 +26,6 @@ Piece Gamestate::getPiece(Bitboard* s, int startingPoint, Move m) {
 			return static_cast<Piece>(startingPoint + i);
 		}
 	}
-	std::cout << startingPoint << std::endl;
-	for (int i = 0; i < 12; i++) std::cout << i << ":\t" << std::bitset<64>(position[i]) << std::endl;
-	std::cout << "s:\t" << std::bitset<64>(*s) << std::endl;
-	std::cout << "m:\t" << std::bitset<16>(m) << std::endl;
-	Misc* msc = new Misc;
-	std::cout << "mstr:\t" << msc->numToString(m) << std::endl;
-	delete msc;
 
 }
 
@@ -91,46 +82,13 @@ std::vector<std::vector<double>> Gamestate::vectorify() {
 
 void Gamestate::moveRights(Piece p, Bitboard* s, Move m, Bitboard* destinationmask) {
 
-	Move toBeTested{};
-
 	if (this->white) {
-		switch (p) {
-		case wP:
-			this->fiftyMoveCounter	= 0;
-			this->lpIndex			= 0;
-
-			toBeTested = m ^ (m << 6);
-			toBeTested >>= 10;
-
-			if (toBeTested == 16) {
-				this->enPassant = *destinationmask >> 8;
-				Bitboard files[8] = { 0x101010101010101, 0x202020202020202, 0x404040404040404, 0x808080808080808, 0x1010101010101010, 0x2020202020202020, 0x4040404040404040, 0x8080808080808080 };
-				for (int i = 0; i < 8; ++i) {
-					if (this->enPassant & files[i]) {
-						this->zobristHash ^= ZobristKeys[773 + i];
-						break;
-					}
-				}
-			}
-		case wK:
-			this->flipCastles(wk);
-			this->flipCastles(wq);
-		case wR:
-			if (*s & wkr) { this->flipCastles(wk); }
-			else if (*s & wqr) { this->flipCastles(wq); }
-		}
-	}
-	else {
-		switch (p) {
-		case bP:
+		if (p == wP) {
 			this->fiftyMoveCounter = 0;
 			this->lpIndex = 0;
 
-			toBeTested = m ^ (m << 6);
-			toBeTested >>= 10;
-
-			if (toBeTested == 16) {
-				this->enPassant = *destinationmask << 8;
+			if (abs(((m & 0x3f0) >> 4) - (m >> 10)) == 16) {
+				doPassantCheck = false;
 				Bitboard files[8] = { 0x101010101010101, 0x202020202020202, 0x404040404040404, 0x808080808080808, 0x1010101010101010, 0x2020202020202020, 0x4040404040404040, 0x8080808080808080 };
 				for (int i = 0; i < 8; ++i) {
 					if (this->enPassant & files[i]) {
@@ -138,13 +96,54 @@ void Gamestate::moveRights(Piece p, Bitboard* s, Move m, Bitboard* destinationma
 						break;
 					}
 				}
+				this->enPassant = *destinationmask >> 8;
+				for (int i = 0; i < 8; ++i) {
+					if (this->enPassant & files[i]) {
+						this->zobristHash ^= ZobristKeys[773 + i];
+						break;
+					}
+				}
 			}
-		case bK:
-			this->flipCastles(bk);
-			this->flipCastles(bq);
-		case bR:
-			if (*s & bkr) { this->flipCastles(bk); }
-			else if (*s & bqr) { this->flipCastles(bq); }
+		}
+		else if (p == wK) {
+			if (castlingRights[wk]) this->flipCastles(wk);
+			if (castlingRights[wq]) this->flipCastles(wq);
+		}
+		else if (p == wR) {
+			if ((*s & wkr) && castlingRights[wk]) { this->flipCastles(wk); }
+			else if ((*s & wqr) && castlingRights[wq]) { this->flipCastles(wq); }
+		}
+	}
+	else {
+		if (p == bP) {
+			this->fiftyMoveCounter = 0;
+			this->lpIndex = 0;
+
+			if (abs(((m & 0x3f0) >> 4) - (m >> 10)) == 16) {
+				doPassantCheck = false;
+				Bitboard files[8] = { 0x101010101010101, 0x202020202020202, 0x404040404040404, 0x808080808080808, 0x1010101010101010, 0x2020202020202020, 0x4040404040404040, 0x8080808080808080 };
+				for (int i = 0; i < 8; ++i) {
+					if (this->enPassant & files[i]) {
+						this->zobristHash ^= ZobristKeys[773 + i];
+						break;
+					}
+				}
+				this->enPassant = *destinationmask << 8;
+				for (int i = 0; i < 8; ++i) {
+					if (this->enPassant & files[i]) {
+						this->zobristHash ^= ZobristKeys[773 + i];
+						break;
+					}
+				}
+			}
+		}
+		else if (p == bK) {
+			if (castlingRights[bk]) this->flipCastles(bk);
+			if (castlingRights[bq]) this->flipCastles(bq);
+		}
+		else if (p == bR){
+			if ((*s & bkr) && castlingRights[bk]) { this->flipCastles(bk); }
+			else if ((*s & bqr) && castlingRights[bq]) { this->flipCastles(bq); }
 		}
 	}
 	
@@ -157,6 +156,7 @@ void Gamestate::makemove(Move m) {
 	Move promocaptureflag	= m & promotioncapture;
 
 	this->fiftyMoveCounter++;
+	doPassantCheck = true;
 
 	if (flagged != castles) {
 
@@ -176,12 +176,11 @@ void Gamestate::makemove(Move m) {
 		this->putPiece(movedpiece, &originmask, from);
 		this->moveRights(movedpiece, &originmask, m, &destinationmask);
 
-		switch (flagged) {
-		case promotionq: this->putPiece(static_cast<Piece>(4 + blackConst), &destinationmask, to);
-		case promotionb: this->putPiece(static_cast<Piece>(3 + blackConst), &destinationmask, to);
-		case promotionn: this->putPiece(static_cast<Piece>(2 + blackConst), &destinationmask, to);
-		case promotionr: this->putPiece(static_cast<Piece>(1 + blackConst), &destinationmask, to);
-		default:
+		if (flagged == promotionq) this->putPiece(static_cast<Piece>(Q + blackConst), &destinationmask, to);
+		else if (flagged == promotionb) this->putPiece(static_cast<Piece>(B + blackConst), &destinationmask, to);
+		else if (flagged == promotionn) this->putPiece(static_cast<Piece>(N + blackConst), &destinationmask, to);
+		else if (flagged == promotionr) this->putPiece(static_cast<Piece>(R + blackConst), &destinationmask, to);
+		else {
 			this->putPiece(movedpiece, &destinationmask, to);
 
 			if (flagged == passant) {
@@ -197,22 +196,20 @@ void Gamestate::makemove(Move m) {
 
 			Piece capturedpiece = getPiece(&destinationmask, eblackConst, m);
 			this->putPiece(capturedpiece, &destinationmask, to);
-			if (capturedpiece == R) {
-				if (this->white) {
-					if (destinationmask & bkr) {
-						this->flipCastles(bk);
-					}
-					else if (destinationmask & bqr) {
-						this->flipCastles(bq);
-					}
+			if (capturedpiece == bR) {
+				if ((destinationmask & bkr) && castlingRights[bk]) {
+					this->flipCastles(bk);
 				}
-				else {
-					if (destinationmask & wkr) {
-						this->flipCastles(wk);
-					}
-					else if (destinationmask & wqr) {
-						this->flipCastles(wq);
-					}
+				else if ((destinationmask & bqr) && castlingRights[bq]) {
+					this->flipCastles(bq);
+				}
+			}
+			else if (capturedpiece == wR) {
+				if ((destinationmask & wkr) && castlingRights[wk]) {
+					this->flipCastles(wk);
+				}
+				else if ((destinationmask & wqr) && castlingRights[wq]) {
+					this->flipCastles(wq);
 				}
 			}
 		}
@@ -267,7 +264,7 @@ void Gamestate::makemove(Move m) {
 		}
 	}
 
-	if (this->enPassant) {
+	if (this->enPassant && doPassantCheck) {
 		Bitboard files[8] = { 0x101010101010101, 0x202020202020202, 0x404040404040404, 0x808080808080808, 0x1010101010101010, 0x2020202020202020, 0x4040404040404040, 0x8080808080808080 };
 		for (int i = 0; i < 8; ++i) {
 			if (this->enPassant & files[i]) {

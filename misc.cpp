@@ -81,10 +81,10 @@ Move Misc::stringToNum(std::string m, Gamestate* gs) {
 	Bitboard destinationmask = static_cast<Bitboard>(1) << destination;
 	Bitboard originmask = static_cast<Bitboard>(1) << origin;
 
-	int capturedpiece = moveflags::none;
-	for (int i = 0; i < 6; i++) { if (gs->position[i + eblackConst] & destinationmask) { capturedpiece = i; break; } }
+	bool captureb = false;
+	for (int i = 0; i < 6; i++) { if (gs->position[i + eblackConst] & destinationmask) { captureb = true; break; } }
 
-	if (capturedpiece == moveflags::none) {
+	if (!captureb) {
 		if (m.size() == 5) { // meaning if move is a promotion
 			if (m.back() == 'q') { return (origin << 10) | (destination << 4) | promotionq; }
 			if (m.back() == 'b') { return (origin << 10) | (destination << 4) | promotionb; }

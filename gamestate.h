@@ -34,6 +34,7 @@ namespace ZeroLogic {
 		int			lpIndex;
 		Bitboard	lastPositions[100];
 		int			fiftyMoveCounter;
+		bool		doPassantCheck;
 
 	};
 

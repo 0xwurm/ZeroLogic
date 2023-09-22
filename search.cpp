@@ -309,6 +309,34 @@ int SearchInstance::bestmove(Move m, int depth, int alpha, int beta, std::stack<
 	return alpha;
 }
 
+void SearchInstance::newperft(int depth) {
+
+	movenum = 0;
+
+	Stats::partialnodes = 0;
+	Stats::overallnodes = 0;
+
+	if (!depth) { Stats::partialnodes++; Stats::overallnodes++; return; }
+
+	Movegenerator mg(&gs, movelist, &movenum);
+	mg.generate();
+
+	Misc* msc = new Misc;
+
+	if (*movelist == checkmate || *movelist == stalemate) { return; }
+
+	for (int i = 0; i < movenum; ++i) {
+
+		SearchInstance SI(&gs);
+		SI.perft(movelist[i], depth - 1);
+		std::cout << msc->numToString(movelist[i]) << ": " << Stats::partialnodes << std::endl;
+		Stats::partialnodes = 0;
+
+	}
+	std::cout << std::endl << "Overall terminal nodes: " << Stats::overallnodes << std::endl;
+
+}
+
 void SearchInstance::perft(Move m, int depth) {
 
 	if (!depth) { Stats::partialnodes++; Stats::overallnodes++; return; }

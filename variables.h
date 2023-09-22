@@ -2,6 +2,7 @@
 #include <bitset>
 #include <map>
 
+
 namespace ZeroLogic {
 
 	// xxxxxx-xxxxxx-x-xxx
