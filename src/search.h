@@ -1,12 +1,12 @@
 #pragma once
-#include "movegeneration.h"
+#include "movegen.h"
 #include "eval.h"
 #include "misc.h"
 #include <iostream>
 #include <stack>
 #include <chrono>
 
-
+/*
 namespace ZeroLogic {
 
 	using namespace Search;
@@ -38,19 +38,20 @@ namespace ZeroLogic {
 		void sort(std::stack<Move>* &pv);
 
 		void perft(Move m, int depth);
+        void n3();
 
 		bool stopFlag = false;
 
 		Move movelist[218]{};
 		Move sortedMovelist[218]{};
-		uint8_t movenum{};
+		unsigned short movenum{};
 
 		Bitboard originmask{};
 		Bitboard destinationmask{};
 		int movedpiece{};
 		int capturedpiece{};
-		uint8_t flagged{};
-		uint8_t promotioncaptureflag{};
+		unsigned short flagged{};
+		unsigned short promotioncaptureflag{};
 		Move castleFlag{};
 
 		int lastIterationEval = 0;
@@ -59,4 +60,4 @@ namespace ZeroLogic {
 		int eblackConst{};
 
 	};
-}
+}*/

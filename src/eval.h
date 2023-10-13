@@ -1,5 +1,6 @@
 #pragma once
-#include "Gamestate.h"
+#include "gamestate.h"
+#include "tables.h"
 
 namespace ZeroLogic {
 
@@ -9,7 +10,7 @@ namespace ZeroLogic {
 
 	public:
 
-		Eval(Gamestate* g);
+		explicit Eval(Gamestate* g);
 		
 		int get();
 
@@ -18,7 +19,7 @@ namespace ZeroLogic {
 		Phase phase();
 
 		int pieces();
-		int pval();
+		int piece_value();
 		int positioning();
 		template <Phase p>
 		int pawn();
@@ -28,6 +29,8 @@ namespace ZeroLogic {
 		int bishop();
 		template <Phase p>
 		int king();
+
+        Bitboard ring(bool do_white);
 
 		Gamestate* g{};
 		Phase p{};

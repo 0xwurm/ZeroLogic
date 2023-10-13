@@ -1,39 +1,41 @@
 #include "search.h"
 #include <sstream>
+#include <iostream>
+#include <bitset>
 
-namespace ZeroLogic {
-	namespace Time {
 
-		std::chrono::steady_clock::time_point stop_at;
-		std::chrono::steady_clock::time_point started_at;
+namespace ZeroLogic::Time {
 
-		void start_time(int msec) {
-			stop_at = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(msec - 1);
-			started_at = std::chrono::high_resolution_clock::now();
-		}
+    std::chrono::time_point<std::chrono::steady_clock> stop_at;
+    std::chrono::time_point<std::chrono::steady_clock> started_at;
 
-		bool timed_out() {
-			if (std::chrono::high_resolution_clock::now() >= stop_at) {
-				return true;
-			}
-			else {
-				return false;
-			}
-		}
+    void start_time(int msec) {
+        stop_at = std::chrono::steady_clock::now() + std::chrono::milliseconds(msec);
+        started_at = std::chrono::steady_clock::now();
+    }
 
-		int getMsec() {
-			return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - started_at).count() * 10e-7;
-		}
+    bool timed_out() {
+        if (std::chrono::steady_clock::now() >= stop_at) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
 
-	}
+    int getMsec() {
+        return static_cast<int>(static_cast<int>((std::chrono::steady_clock::now() - started_at).count()) * 10e-7);
+    }
+
 }
+
 
 using namespace ZeroLogic;
 using namespace Search;
 using namespace Evaluation;
 
-int Stats::partialnodes = 0;
-uint32_t Stats::overallnodes = 0;
+unsigned int Stats::partialnodes = 0;
+uint64_t Stats::overallnodes = 0;
 int Stats::fullDepth = 0;
 int Stats::maxDepth = 0;
 
@@ -48,11 +50,10 @@ int SearchInstance::initBestmove(int depth, int alpha, int beta, std::stack<Move
 
 	if (pv.empty()) { newPv = nullptr; }
 
-	Movegenerator mg(&gs, movelist, &movenum);
-	mg.generate();
+	MoveGenerator mg(&gs, movelist, &movenum);
+	mg.go();
 
-	if (*movelist == checkmate) { return 0; }
-	else if (*movelist == stalemate) { return 0; }
+	if (*movelist == checkmate || *movelist == stalemate) { return 0; }
 
 	sort(newPv);
 
@@ -92,8 +93,6 @@ void SearchInstance::initID(int depth) {
 	std::stack<Move> lastPv{};
 	std::stack<Move> displayPv{};
 
-	Misc misc;
-
 	while (depth) {
 
 		Stats::fullDepth = nextDepth;
@@ -118,7 +117,7 @@ void SearchInstance::initID(int depth) {
 			ss << " score cp " << currentIterationEval;
 		}
 		if (!newPv.empty()) {
-			 ss << " pv"; displayPv = newPv; while (!displayPv.empty()) { ss << " " << misc.numToString(displayPv.top()); displayPv.pop(); };
+			 ss << " pv"; displayPv = newPv; while (!displayPv.empty()) { ss << " " << Misc::numToString(displayPv.top()); displayPv.pop(); };
 		}
 		ss << "\n";
 		std::cout << ss.str();
@@ -164,13 +163,13 @@ void SearchInstance::initID(int depth) {
 		ss << " score cp " << lastIterationEval;
 	}
 	if (!newPv.empty()) {
-		ss << " pv"; displayPv = newPv; while (!displayPv.empty()) { ss << " " << misc.numToString(displayPv.top()); displayPv.pop(); };
+		ss << " pv"; displayPv = newPv; while (!displayPv.empty()) { ss << " " << Misc::numToString(displayPv.top()); displayPv.pop(); };
 	}
 	ss << " time " << Time::getMsec();
 	ss << "\n";
 	std::cout << ss.str();
 	
-	std::cout << "bestmove " << misc.numToString(Bestmove) << "\n";
+	std::cout << "bestmove " << Misc::numToString(Bestmove) << "\n";
 }
 
 
@@ -198,13 +197,12 @@ void SearchInstance::sort(std::stack<Move>* &pv) {
 	} 
 }
 
-
+// move away from stacks
 int SearchInstance::see(int exchangeIndex, Move m, int depth, int alpha, int beta, std::stack<Move>*& pv, std::stack<Move>* lowerPv) {
 
 	this->gs.makemove(m);
 
-	Movegenerator mg(&gs, movelist, &movenum);
-	mg.generate();
+	n3();
 
 	if (*movelist == checkmate) { return (-100000 + Stats::fullDepth - depth); }
 	else if (*movelist == stalemate) { return 0; }
@@ -230,9 +228,8 @@ int SearchInstance::see(int exchangeIndex, Move m, int depth, int alpha, int bet
 		else {
 			Stats::overallnodes++; Stats::partialnodes++;
 			Stats::maxDepth = std::max(Stats::maxDepth, Stats::fullDepth - depth);
-			Eval* eval = new Eval(&this->gs);
-			int val = eval->get();
-			delete eval;
+			Eval eval(&this->gs);
+			int val = eval.get();
 			value = ((gs.white) ? 1 : -1) * val;
 		}
 
@@ -257,14 +254,13 @@ int SearchInstance::bestmove(Move m, int depth, int alpha, int beta, std::stack<
 	if (!depth) {
 		Stats::overallnodes++;
 		Stats::partialnodes++;
-		Eval* eval = new Eval(&this->gs);
-		int val = eval->get();
-		delete eval;
+		Eval eval(&this->gs);
+		int val = eval.get();
 		return ((gs.white) ? 1 : -1) * val;
 	}
 
-	Movegenerator mg(&gs, movelist, &movenum);
-	mg.generate();
+	MoveGenerator mg(&gs, movelist, &movenum);
+	mg.go();
 
 	if (*movelist == checkmate) { return (-100000 + Stats::fullDepth - depth); }
 	else if (*movelist == stalemate) { return 0; }
@@ -318,10 +314,8 @@ void SearchInstance::newperft(int depth) {
 
 	if (!depth) { Stats::partialnodes++; Stats::overallnodes++; return; }
 
-	Movegenerator mg(&gs, movelist, &movenum);
-	mg.generate();
-
-	Misc* msc = new Misc;
+	MoveGenerator mg(&gs, movelist, &movenum);
+	mg.go();
 
 	if (*movelist == checkmate || *movelist == stalemate) { return; }
 
@@ -329,7 +323,7 @@ void SearchInstance::newperft(int depth) {
 
 		SearchInstance SI(&gs);
 		SI.perft(movelist[i], depth - 1);
-		std::cout << msc->numToString(movelist[i]) << ": " << Stats::partialnodes << std::endl;
+		std::cout << Misc::numToString(movelist[i]) << ": " << Stats::partialnodes << std::endl;
 		Stats::partialnodes = 0;
 
 	}
@@ -337,23 +331,34 @@ void SearchInstance::newperft(int depth) {
 
 }
 
+void SearchInstance::n3(){
+    MoveGenerator mg(&gs, movelist, &movenum);
+    mg.go();
+}
+
 void SearchInstance::perft(Move m, int depth) {
 
-	if (!depth) { Stats::partialnodes++; Stats::overallnodes++; return; }
+    if (!depth) { Stats::partialnodes++; Stats::overallnodes++; return; }
 
-	this->gs.makemove(m);
+    this->gs.makemove(m);
 
-	Movegenerator mg(&gs, movelist, &movenum);
-	mg.generate();
+    // WHY IS THIS FASTER???????
+    n3();
 
-	if (*movelist == checkmate || *movelist == stalemate) { return; }
+    if (*movelist == checkmate || *movelist == stalemate) { return; }
 
-	for (int i = 0; i < movenum; ++i) {
+    if (depth - 1){
+        for (int i = 0; i < movenum; ++i) {
 
-		SearchInstance SI(&gs);
-		SI.perft(movelist[i], depth - 1);
+            SearchInstance SI(&gs);
+            SI.perft(movelist[i], depth - 1);
 
-	}
+        }
+    }
+    else{
+        Stats::partialnodes += movenum;
+        Stats::overallnodes += movenum;
+    }
 
 }
 
@@ -362,8 +367,8 @@ void SearchInstance::newsearch(SType mode, int depth) {
 
 	if (mode == PERFT){
 
-		Movegenerator mg(&gs, movelist, &movenum);
-		mg.generate();
+		MoveGenerator mg(&gs, movelist, &movenum);
+		mg.go();
 		
 		if (!(*movelist == checkmate || *movelist == stalemate)) {
 
@@ -372,8 +377,7 @@ void SearchInstance::newsearch(SType mode, int depth) {
 				SearchInstance SI(&gs);
 				SI.perft(movelist[i], depth - 1);
 
-				Misc misc;
-				std::string move = misc.numToString(movelist[i]);
+				std::string move = Misc::numToString(movelist[i]);
 				std::cout << move << ": " << Stats::partialnodes << "\n";
 				Stats::partialnodes = 0;
 
