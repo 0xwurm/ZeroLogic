@@ -1,7 +1,7 @@
 #pragma once
 #include "gamestate.h"
 #include "tables.h"
-
+/*
 namespace ZeroLogic {
 
 	using namespace Evaluation;
@@ -29,6 +29,8 @@ namespace ZeroLogic {
 		int bishop();
 		template <Phase p>
 		int king();
+        template <Phase p>
+        int queen();
 
         Bitboard ring(bool do_white);
 
@@ -37,4 +39,4 @@ namespace ZeroLogic {
 
 	};
 
-}
+}*/

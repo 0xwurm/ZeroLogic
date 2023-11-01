@@ -6,7 +6,7 @@
 
 using namespace ZeroLogic;
 using namespace Evaluation;
-
+/*
 Files files[8] = { A, Bf, C, D, E, F, G, H };
 
 Eval::Eval(Gamestate* g) {
@@ -51,23 +51,26 @@ int Eval::pawn() {
     else if (p == midgame){
 #define chain(piece, shift, factor) g->position[piece] << (shift * factor)
         // pawn chains (ignore borders)
-        val += 3 * piece_count(g->position[wP] & chain(wP, 7, 1));
-        val += 5 * piece_count(g->position[wP] & chain(wP, 7, 1) & chain(wP, 7, 2));
-        val += 10 * piece_count(g->position[wP] & chain(wP, 7, 1) & chain(wP, 7, 2) & chain(wP, 7, 3));
-        val += 3 * piece_count(g->position[wP] & chain(wP, 9, 1));
-        val += 5 * piece_count(g->position[wP] & chain(wP, 9, 1) & chain(wP, 9, 2));
-        val += 10 * piece_count(g->position[wP] & chain(wP, 9, 1) & chain(wP, 9, 2) & chain(wP, 9, 3));
+        val += 3 * piece_count(g->position[wP] & chain(wP, 7, 1) & mid_files);
+        val += 5 * piece_count(g->position[wP] & chain(wP, 7, 1) & chain(wP, 7, 2) & mid_files);
+        val += 10 * piece_count(g->position[wP] & chain(wP, 7, 1) & chain(wP, 7, 2) & chain(wP, 7, 3) & mid_files);
+        val += 3 * piece_count(g->position[wP] & chain(wP, 9, 1) & mid_files);
+        val += 5 * piece_count(g->position[wP] & chain(wP, 9, 1) & chain(wP, 9, 2) & mid_files);
+        val += 10 * piece_count(g->position[wP] & chain(wP, 9, 1) & chain(wP, 9, 2) & chain(wP, 9, 3) & mid_files);
 
-        val -= 3 * piece_count(g->position[bP] & chain(bP, 7, 1));
-        val -= 5 * piece_count(g->position[bP] & chain(bP, 7, 1) & chain(bP, 7, 2));
-        val -= 10 * piece_count(g->position[bP] & chain(bP, 7, 1) & chain(bP, 7, 2) & chain(bP, 7, 3));
-        val -= 3 * piece_count(g->position[bP] & chain(bP, 9, 1));
-        val -= 5 * piece_count(g->position[bP] & chain(bP, 9, 1) & chain(bP, 9, 2));
-        val -= 10 * piece_count(g->position[bP] & chain(bP, 9, 1) & chain(bP, 9, 2) & chain(bP, 9, 3));
+        val -= 3 * piece_count(g->position[bP] & chain(bP, 7, 1) & mid_files);
+        val -= 5 * piece_count(g->position[bP] & chain(bP, 7, 1) & chain(bP, 7, 2) & mid_files);
+        val -= 10 * piece_count(g->position[bP] & chain(bP, 7, 1) & chain(bP, 7, 2) & chain(bP, 7, 3) & mid_files);
+        val -= 3 * piece_count(g->position[bP] & chain(bP, 9, 1) & mid_files);
+        val -= 5 * piece_count(g->position[bP] & chain(bP, 9, 1) & chain(bP, 9, 2) & mid_files);
+        val -= 10 * piece_count(g->position[bP] & chain(bP, 9, 1) & chain(bP, 9, 2) & chain(bP, 9, 3) & mid_files);
 
         // doubled pawns
         val -= 10 * piece_count(g->position[wP] & chain(wP, 8, 1));
         val += 10 * piece_count(g->position[bP] & chain(bP, 8, 1));
+
+        val -= 10 * piece_count(g->position[wP] & flank_mid);
+        val += 10 * piece_count(g->position[bP] & flank_mid);
 #undef chain
     }
     else{
@@ -111,7 +114,7 @@ int Eval::knight() {
 
 	int val = 0;
 
-    if (p == opening) {
+    if (p == opening || p == midgame) {
         val += 20 * piece_count(g->position[wN] & extendedCenter);
         val -= 20 * piece_count(g->position[bN] & extendedCenter);
     }
@@ -125,7 +128,7 @@ int Eval::bishop() {
 
 	int val = 0;
 
-    if (p == opening) {
+    if (p == opening || p == midgame) {
         val += 15 * piece_count(g->position[wB] & middleStrip);
         val -= 15 * piece_count(g->position[bB] & middleStrip);
         val += 8 * piece_count(g->position[wB] & extendedStrip);
@@ -149,20 +152,29 @@ int Eval::king() {
         if (g->position[wK] & wsafe) val += 30;
         if (g->position[bK] & bsafe) val -= 30;
 
-        // val -= 7 * piece_count(ring(true));
-        // val += 7 * piece_count(ring(false));
+        val -= 7 * piece_count(ring(true));
+        val += 7 * piece_count(ring(false));
     }
     else{
         if (g->position[wK] & bigmid) val += 20;
         if (g->position[bK] & bigmid) val -= 20;
 
-
-        // val -= 10 * piece_count(ring(true));
-        // val += 10 * piece_count(ring(false));
+        val -= 10 * piece_count(ring(true));
+        val += 10 * piece_count(ring(false));
     }
 
 	return val;
 
+}
+
+template <Phase p>
+int Eval::queen() {
+    int val = 0;
+    if (p == opening){
+        val += 10 * piece_count(g->position[wQ] & queensStarting);
+        val -= 10 * piece_count(g->position[bQ] & queensStarting);
+    }
+    return val;
 }
 
 Bitboard get_pawn_attacks(Bitboard origin, bool white){
@@ -219,10 +231,13 @@ int Eval::positioning() {
 		val += king<opening>();
 		val += knight<opening>();
 		val += bishop<opening>();
+        val += queen<opening>();
 	}
 	else if (p == midgame) {
 		val += pawn<midgame>();
 		val += king<midgame>();
+        val += knight<midgame>();
+        val += bishop<midgame>();
 	}
 	else {
 		val += pawn<endgame>();
@@ -270,4 +285,4 @@ int Eval::get() {
 
 	return val;
 
-}
+}*/

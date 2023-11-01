@@ -5,6 +5,7 @@
 #include <chrono>
 #include <iostream>
 
+/*
 namespace ZeroLogic::Search{
     using eval = int;
 
@@ -13,4 +14,4 @@ namespace ZeroLogic::Search{
 
     template <bool white>
     void start_iterative_deepening(Gamestate gs, int msec);
-}
+}*/
