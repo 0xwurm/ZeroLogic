@@ -12,7 +12,6 @@ add_compile_options("-mbmi")
 
 add_executable(ZeroLogic
         src/main.cpp
-        src/eval.cpp
         src/uci.cpp
         src/tables.h
         src/eval.h

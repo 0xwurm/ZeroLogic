@@ -1,42 +1,14 @@
 #pragma once
 #include "gamestate.h"
-#include "tables.h"
-/*
-namespace ZeroLogic {
+#define BitCount(X) __popcnt64(X)
 
-	using namespace Evaluation;
-
-	class Eval {
-
-	public:
-
-		explicit Eval(Gamestate* g);
-		
-		int get();
-
-	private:
-
-		Phase phase();
-
-		int pieces();
-		int piece_value();
-		int positioning();
-		template <Phase p>
-		int pawn();
-		template <Phase p>
-		int knight();
-		template <Phase p>
-		int bishop();
-		template <Phase p>
-		int king();
-        template <Phase p>
-        int queen();
-
-        Bitboard ring(bool do_white);
-
-		Gamestate* g{};
-		Phase p{};
-
-	};
-
-}*/
+namespace ZeroLogic::Eval{
+    // eval in pawns
+    FORCEINLINE static u16 eval(const Boardstate::Board& board){
+        u16 val =   BitCount(board.WPawn) - BitCount(board.BPawn);
+            val +=  3 * (BitCount(board.WBishop | board.WKnight) - BitCount(board.BBishop | board.BKnight));
+            val +=  5 * (BitCount(board.WRook) - BitCount(board.BRook));
+            val +=  9 * (BitCount(board.WQueen) - BitCount(board.BQueen));
+        return val;
+    }
+}

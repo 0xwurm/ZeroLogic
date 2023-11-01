@@ -3,13 +3,12 @@
 #include "variables.h"
 #include "tables.h"
 #include "misc.h"
+#include "eval.h"
 #include <intrin.h>
 #include <chrono>
-#include <bitset>
 
 #define SquareOf(X) _tzcnt_u64(X)
 #define Bitloop(X) for(;X; X = _blsr_u64(X))
-#define BitCount(X) __popcnt64(X)
 
 namespace ZeroLogic::Movegen{
     using namespace Boardstate;
