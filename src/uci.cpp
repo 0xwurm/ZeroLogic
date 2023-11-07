@@ -1,12 +1,11 @@
 #include "uci.h"
 #include "misc.h"
-#include "movegen.h"
+#include "perft_callback.h"
 #include "gamestate.h"
-#include <bitset>
 
 namespace ZeroLogic::UCI{
 
-    std::string engine_info = "id name ZeroLogic v4.1-dev\nid author wurm\n";
+    std::string engine_info = "id name 0sama\nid author wurm\n";
 
     void position(std::istringstream& is, Boardstate::Board*& board, Boardstate::State*& state, Bit& ep_target) {
 
@@ -51,7 +50,7 @@ namespace ZeroLogic::UCI{
             }
             else if (token == "perft") {
                 is >> token;
-                Movegen::enumerate<state, true>(board, std::stoi(token), ep_target);
+                Perft::go<state>(board, std::stoi(token), ep_target);
             }
 
     }

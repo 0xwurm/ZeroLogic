@@ -18,7 +18,6 @@ add_executable(ZeroLogic
         src/gamestate.h
         src/uci.h
         src/variables.h
-        src/movegen.h
+        src/movegenerator.h
         src/misc.h
-        src/new_search.h
-        src/new_search.cpp)
+        src/perft_callback.h)

@@ -5,45 +5,19 @@
 #define FORCEINLINE __forceinline
 
 namespace ZeroLogic {
+    typedef unsigned char u8;
     typedef unsigned short u16;
 
-	// Every move is stored using 16 bits.
-    // 6 origin - 4 flags- 6 destination
-    //
-    // flags: promotion - 1000, capture - 0001, castles - 0100, en passant - 0101
-    // promotion: r = 1000, n = 1001, b = 1010, q = 1011
-    // castles: (LSBs) w00 = 00, w000 = 01, b00 = 10, b000 = 11
-	enum Move : u16{
-        MOVE_NULL, MOVE_CHECKMATE = 0x0401, MOVE_DRAW = 0x0802,
-
-        // flags
-        MOVE_FLAG = 0b1111 << 6,
-        NORMAL_FLAG = MOVE_NULL, CAPTURE_FLAG = 1 << 6, PROMOTION_FLAG = 0b1000 << 6,
-        CASTLES_FLAG = 0b100 << 6, EP_FLAG = 0b101 << 6,
-        PROMOTION_R = PROMOTION_FLAG, PROMOTION_N = 0b1001 << 6,
-        PROMOTION_B = 0b1010 << 6, PROMOTION_Q = 0b1011 << 6,
-        PROMOTION_TYPE_FLAG = 3 << 6, CASTLE_TYPE_FLAG = 3,
-        CASTLE_PROMO_EP_FLAG = 0b11 << 8, DESTINATION_FLAG = 0x3f
-    };
 	typedef unsigned long long map;
     typedef unsigned long long Bit;
     typedef unsigned char Square;
 
-    constexpr Move operator&(Move m1, Move m2) {return Move(u16(m1) & u16(m2));}
-    constexpr Move operator|(Move m1, Move m2) {return Move(u16(m1) | u16(m2));}
-    constexpr Move& operator>>=(Move& m1, int shift) {return m1 = Move(int(m1) >> shift);}
-
-
     static std::string start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-    enum Piece {
+    enum Piece : u8 {
         PAWN = 0, ROOK, KNIGHT, BISHOP, QUEEN, KING,
         PIECE_INVALID = 14
     };
-
-    constexpr Piece operator~(Piece p){return Piece(p^8);} // flip piece color
-    inline Piece& operator++(Piece& p){return p = Piece(int(p) + 1);}
-    constexpr Piece operator*(Piece p){return Piece(p & 0b111);} // set piece to white
 
     enum CastleType{
         WHITE_OO = 0, WHITE_OOO, BLACK_OO, BLACK_OOO,
@@ -99,13 +73,9 @@ namespace ZeroLogic {
         };
     }
 
-    template <class T, int size>
-    struct fake_stack{
-        T list[size]{};
-        int index = 0;
-        void put_in(T item) {list[index] = item; index++;}
-        T get_out() {index--; return list[index];}
-    };
+    // index 1 - pr(0) pl(1)
+    // index 2 - white(1) black(0)
+    constexpr int pawn_shift[2][2] = {{9, -7}, {7, -9}};
 
 
     enum Castling : const map {
