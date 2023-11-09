@@ -63,7 +63,7 @@ namespace ZeroLogic::Movegen{
     }
 
     template <State state>
-    FORCEINLINE void ep_pin(Square king_square, const Bit king, map enemyRQ, const Board& board, Bit& ep_target){
+    FORCEINLINE void ep_pin(Square king_square, const Bit& king, map enemyRQ, const Board& board, Bit& ep_target){
         constexpr bool us = state.white_move;
         const map pawns = Pawns<us>(board);
 
@@ -82,7 +82,12 @@ namespace ZeroLogic::Movegen{
         }
     }
 
-
+    template<State state, bool root, bool leaf, class Callback>
+    FORCEINLINE void king_moves(const Board& board, map& kingmoves, u8& depth){
+        map kingcaptures = kingmoves & ColorPieces<!state.white_move>(board);
+        kingmoves &= ~board.Occ;
+        Callback::template kingmove<state, root, leaf>(board, kingmoves, kingcaptures, depth);
+    }
 
 
 
@@ -164,69 +169,9 @@ namespace ZeroLogic::Movegen{
 
     }
 
-#define silent_loops(piece)\
-    Bitloop(moves)  \
-    Callback::template silent_move<state, false, piece, root>(board, 1ull << sq, 1ull << SquareOf(moves), depth);  \
-    Bitloop(captures)   \
-    Callback::template silent_move<state, true, piece, root>(board, 1ull << sq, 1ull << SquareOf(captures), depth);
-
-    template <State state, bool root, class Callback>
-    FORCEINLINE void pawn_loops(const Board& board, u8 depth, map pr, map pl, map pr_promo, map pl_promo, map pf, map pf_promo, map pp){
-        constexpr bool us = state.white_move;
-        Bitloop(pr){
-            Square sq = SquareOf(pr);
-            Callback::template silent_move<state, true, PAWN, root>(board, 1ull << (sq + pawn_shift[0][us]), 1ull << sq, depth);
-        }
-        Bitloop(pl){
-            Square sq = SquareOf(pl);
-            Callback::template silent_move<state, true, PAWN, root>(board, 1ull << (sq + pawn_shift[1][us]), 1ull << sq, depth);
-        }
-        Bitloop(pr_promo){
-            Square sq = SquareOf(pr_promo); Bit from = 1ull << (sq + pawn_shift[0][us]), to = 1ull << sq;
-            Callback::template promotion_move<state, QUEEN, true, root>(board, from, to, depth);
-            Callback::template promotion_move<state, ROOK, true, root>(board, from, to, depth);
-            Callback::template promotion_move<state, BISHOP, true, root>(board, from, to, depth);
-            Callback::template promotion_move<state, KNIGHT, true, root>(board, from, to, depth);
-        }
-        Bitloop(pl_promo){
-            Square sq = SquareOf(pl_promo); Bit from = 1ull << (sq + pawn_shift[1][us]), to = 1ull << sq;
-            Callback::template promotion_move<state, QUEEN, true, root>(board, from, to, depth);
-            Callback::template promotion_move<state, ROOK, true, root>(board, from, to, depth);
-            Callback::template promotion_move<state, BISHOP, true, root>(board, from, to, depth);
-            Callback::template promotion_move<state, KNIGHT, true, root>(board, from, to, depth);
-        }
-        Bitloop(pf){
-            Square sq = SquareOf(pf);
-            Callback::template silent_move<state, false, PAWN, root>(board, 1ull << (sq + sign<us>(-8)), 1ull << sq, depth);
-        }
-        Bitloop(pf_promo){
-            Square sq = SquareOf(pf_promo); Bit from = 1ull << (sq + sign<us>(-8)), to = 1ull << sq;
-            Callback::template promotion_move<state, QUEEN, false, root>(board, from, to, depth);
-            Callback::template promotion_move<state, ROOK, false, root>(board, from, to, depth);
-            Callback::template promotion_move<state, BISHOP, false, root>(board, from, to, depth);
-            Callback::template promotion_move<state, KNIGHT, false, root>(board, from, to, depth);
-        }
-        Bitloop(pp){
-            Square sq = SquareOf(pp);
-            Callback::template pawn_push<state, root>(board, 1ull << (sq + sign<us>(-16)), 1ull << sq, depth);
-        }
-    }
-
-    template <State state, bool root, class Callback>
-    FORCEINLINE void king_moves(const Board& board, u8 depth, map& kingmoves) {
-        constexpr bool us = state.white_move;
-        constexpr bool enemy = !us;
-        map king_captures = kingmoves & ColorPieces<enemy>(board);
-        kingmoves &= ~board.Occ;
-        Bitloop(kingmoves)
-            Callback::template kingmove<state, false, root>(board, King<us>(board), 1ull << SquareOf(kingmoves), depth);
-        Bitloop(king_captures)
-            Callback::template kingmove<state, true, root>(board, King<us>(board), 1ull << SquareOf(king_captures), depth);
-    }
-
     // enumerator for check-positions
-    template <State state, bool root, bool count, class Callback>
-    FORCEINLINE void _enumerate(const Board& board, const map& checkmask, const map& pin_rook, const map& pin_bishop, u8 depth, const map& ep_target){
+    template <State state, bool root, bool leaf, class Callback>
+    FORCEINLINE void _enumerate(const Board& board, const map& checkmask, const map& pin_rook, const map& pin_bishop, u8& depth, Bit& ep_target){
         constexpr bool us = state.white_move;
         constexpr bool enemy = !us;
         const map no_pin = ~(pin_rook | pin_bishop);
@@ -243,31 +188,16 @@ namespace ZeroLogic::Movegen{
             map pp = pawn_forward<us>(pf & third_rank<us>()) & ~board.Occ & checkmask; pf &= checkmask;
             map pf_promo = pf & last_rank<us>(); pf &= not_last_rank<us>();
 
+            Callback::template pawn_move<state, root, leaf>(board, pr, pl, pr_promo, pl_promo, pf, pp, pf_promo, depth);
+
             if constexpr (state.has_ep_pawn){
                 if (ep_target){
                     Bit lep = not_pinned & ~A_FILE & ((ep_target & checkmask) >> 1);
                     Bit rep = not_pinned & ~H_FILE & ((ep_target & checkmask) << 1);
 
-                    if constexpr (count) {
-                        if (lep) Callback::increment_nodecount();
-                        if (rep) Callback::increment_nodecount();
-                    }
-                    else {
-                        if (lep) Callback::template ep_move<state, root>(board, lep, pawn_atk_left<us>(lep), ep_target, depth);
-                        if (rep) Callback::template ep_move<state, root>(board, rep, pawn_atk_right<us>(rep), ep_target, depth);
-                    }
+                    Callback::template ep_move<state, root, leaf>(board, lep, rep, ep_target, depth);
                 }
             }
-
-            if constexpr (count){
-                Callback::count(pr);
-                Callback::count(pl);
-                Callback::count_promotion(pr_promo);
-                Callback::count_promotion(pl_promo);
-                Callback::count(pf | pp);
-                Callback::count_promotion(pf_promo);
-            }
-            else pawn_loops<state, root, Callback>(board, depth, pr, pl, pr_promo, pl_promo, pf, pf_promo, pp);
         }
 
         // knights
@@ -278,10 +208,7 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::knight[sq] & checkmask;
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
-                if constexpr (count){
-                    Callback::count(moves | captures);
-                }
-                else { silent_loops(KNIGHT) }
+                Callback::template silent_move<state, KNIGHT, root, leaf>(board, moves, captures, sq, depth);
             }
         }
 
@@ -295,13 +222,8 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::b_atk(sq, board.Occ) & checkmask;
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
-                if constexpr (count){
-                    Callback::count(moves | captures);
-                }
-                else {
-                    if (1ull << sq & queens)    { silent_loops(QUEEN) }
-                    else                        { silent_loops(BISHOP) }
-                }
+                if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, depth);
+                else                        Callback::template silent_move<state, BISHOP, root, leaf>(board, moves, captures, sq, depth);
             }
         }
         // rooks & queens
@@ -313,48 +235,26 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::r_atk(sq, board.Occ) & checkmask;
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
-                if constexpr (count){
-                    Callback::count(moves | captures);
-                }
-                else {
-                    if (1ull << sq & queens){ silent_loops(QUEEN) }
-                    else{
-                        Bitloop(moves)
-                            Callback::template rookmove<state, false, root>(board, 1ull << sq, 1ull << SquareOf(moves), depth);
-                        Bitloop(captures)
-                            Callback::template rookmove<state, true, root>(board, 1ull << sq, 1ull << SquareOf(captures), depth);
-                    }
-                }
+                if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, depth);
+                else                        Callback::template rookmove<state, root, leaf>(board, moves, captures, sq, depth);
             }
         }
     }
 
     // enumerator for non-check-positions
-    template <State state, bool root, bool count, class Callback>
-    FORCEINLINE void _enumerate(const Board& board, const map& pin_rook, const map& pin_bishop, u8 depth, const map& ep_target, const map kingban){
+    template <State state, bool root, bool leaf, class Callback>
+    FORCEINLINE void _enumerate(const Board& board, const map& pin_rook, const map& pin_bishop, u8& depth, Bit& ep_target, const map& kingban){
         constexpr bool us = state.white_move;
         constexpr bool enemy = !us;
         const map no_pin = ~(pin_rook | pin_bishop);
 
         // castles
-        if constexpr (state.can_oo<us>()){
-            if (State::short_legal<us>(board.Occ, Rooks<us>(board), kingban)) {
-                if constexpr (count) Callback::increment_nodecount();
-                else {
-                    if constexpr (state.white_move) Callback::template castlemove<state, WHITE_OO, root>(board, depth);
-                    else                            Callback::template castlemove<state, BLACK_OO, root>(board, depth);
-                }
-            }
-        }
-        if constexpr (state.can_ooo<us>()){
-            if (State::long_legal<us>(board.Occ, Rooks<us>(board), kingban)) {
-                if constexpr (count) Callback::increment_nodecount();
-                else {
-                    if constexpr (state.white_move) Callback::template castlemove<state, WHITE_OOO, root>(board, depth);
-                    else                            Callback::template castlemove<state, BLACK_OOO, root>(board, depth);
-                }
-            }
-        }
+        if constexpr (state.can_oo<us>())
+            if (State::short_legal<us>(board.Occ, Rooks<us>(board), kingban))
+                Callback::template castlemove<state, false, root, leaf>(board, depth);
+        if constexpr (state.can_ooo<us>())
+            if (State::long_legal<us>(board.Occ, Rooks<us>(board), kingban))
+                Callback::template castlemove<state, true, root, leaf>(board, depth);
 
         // pawns
         {
@@ -371,6 +271,8 @@ namespace ZeroLogic::Movegen{
             map pf_promo = pf & last_rank<us>(); pf &= not_last_rank<us>();
             map pp = pawn_forward<us>(pf & third_rank<us>()) & ~board.Occ;
 
+            Callback::template pawn_move<state, root, leaf>(board, pr, pl, pr_promo, pl_promo, pf, pp, pf_promo, depth);
+
             if constexpr (state.has_ep_pawn){
                 if (ep_target & ~pin_bishop){
                     Bit lep = ~pin_rook & ~A_FILE & (ep_target >> 1) & pawns;
@@ -379,26 +281,9 @@ namespace ZeroLogic::Movegen{
                     if (rep & pin_bishop) rep = pawn_atk_right<us>(rep) & pin_bishop;
                     if (lep & pin_bishop) lep = pawn_atk_left<us>(lep) & pin_bishop;
 
-                    if constexpr (count) {
-                        if (lep) Callback::increment_nodecount();
-                        if (rep) Callback::increment_nodecount();
-                    }
-                    else {
-                        if (lep) Callback::template ep_move<state, root>(board, lep, pawn_atk_left<us>(lep), ep_target, depth);
-                        if (rep) Callback::template ep_move<state, root>(board, rep, pawn_atk_right<us>(rep), ep_target, depth);
-                    }
+                    Callback::template ep_move<state, root, leaf>(board, lep, rep, ep_target, depth);
                 }
             }
-
-            if constexpr (count){
-                Callback::count(pr);
-                Callback::count(pl);
-                Callback::count_promotion(pr_promo);
-                Callback::count_promotion(pl_promo);
-                Callback::count(pf | pp);
-                Callback::count_promotion(pf_promo);
-            }
-            else pawn_loops<state, root, Callback>(board, depth, pr, pl, pr_promo, pl_promo, pf, pf_promo, pp);
         }
 
         // knights
@@ -409,10 +294,7 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::knight[sq];
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
-                if constexpr (count){
-                    Callback::count(moves | captures);
-                }
-                else { silent_loops(KNIGHT) }
+                Callback::template silent_move<state, KNIGHT, root, leaf>(board, moves, captures, sq, depth);
             }
         }
 
@@ -428,26 +310,16 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::b_atk(sq, board.Occ) & pin_bishop;
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
-                if constexpr (count){
-                    Callback::count(moves | captures);
-                }
-                else {
-                    if (1ull << sq & queens)    { silent_loops(QUEEN) }
-                    else                        { silent_loops(BISHOP) }
-                }
+                if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, depth);
+                else                        Callback::template silent_move<state, BISHOP, root, leaf>(board, moves, captures, sq, depth);
             }
             Bitloop(not_pinned){
                 const Square sq = SquareOf(not_pinned);
                 map moves = Lookup::b_atk(sq, board.Occ);
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
-                if constexpr (count){
-                    Callback::count(moves | captures);
-                }
-                else {
-                    if (1ull << sq & queens)    { silent_loops(QUEEN) }
-                    else                        { silent_loops(BISHOP) }
-                }
+                if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, depth);
+                else                        Callback::template silent_move<state, BISHOP, root, leaf>(board, moves, captures, sq, depth);
             }
         }
         // rooks & queens
@@ -461,36 +333,16 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::r_atk(sq, board.Occ) & pin_rook;
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
-                if constexpr (count){
-                    Callback::count(moves | captures);
-                }
-                else {
-                    if (1ull << sq & queens){ silent_loops(QUEEN) }
-                    else{
-                        Bitloop(moves)
-                            Callback::template rookmove<state, false, root>(board, 1ull << sq, 1ull << SquareOf(moves), depth);
-                        Bitloop(captures)
-                            Callback::template rookmove<state, true, root>(board, 1ull << sq, 1ull << SquareOf(captures), depth);
-                        }
-                }
+                if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, depth);
+                else                        Callback::template rookmove<state, root, leaf>(board, moves, captures, sq, depth);
             }
             Bitloop(not_pinned){
                 const Square sq = SquareOf(not_pinned);
                 map moves = Lookup::r_atk(sq, board.Occ);
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
-                if constexpr (count){
-                    Callback::count(moves | captures);
-                }
-                else {
-                    if (1ull << sq & queens){ silent_loops(QUEEN) }
-                    else{
-                        Bitloop(moves)
-                            Callback::template rookmove<state, false, root>(board, 1ull << sq, 1ull << SquareOf(moves), depth);
-                        Bitloop(captures)
-                            Callback::template rookmove<state, true, root>(board, 1ull << sq, 1ull << SquareOf(captures), depth);
-                    }
-                }
+                if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, depth);
+                else                        Callback::template rookmove<state, root, leaf>(board, moves, captures, sq, depth);
             }
         }
 
@@ -502,7 +354,7 @@ namespace ZeroLogic::Movegen{
         map rook_pin = 0, bishop_pin = 0, kingban = 0, checkmask, kingmoves;
         make_masks<state>(board, king, checkmask, kingban, rook_pin, bishop_pin, kingmoves, ep_target);
         if (depth == 1){
-            Callback::count(kingmoves);
+            king_moves<state, root, true, Callback>(board, kingmoves, depth);
             if (checkmask == full)
                 _enumerate<state, root, true, Callback>(board, rook_pin, bishop_pin, depth, ep_target, kingban);
             else if (checkmask)
@@ -510,7 +362,7 @@ namespace ZeroLogic::Movegen{
             // else double check
         }
         else {
-            king_moves<state, root, Callback>(board, depth, kingmoves);
+            king_moves<state, root, false, Callback>(board, kingmoves, depth);
             if (checkmask == full)
                 _enumerate<state, root, false, Callback>(board, rook_pin, bishop_pin, depth, ep_target, kingban);
             else if (checkmask)

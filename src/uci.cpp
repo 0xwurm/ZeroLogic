@@ -1,7 +1,6 @@
 #include "uci.h"
 #include "misc.h"
 #include "perft_callback.h"
-#include "gamestate.h"
 
 namespace ZeroLogic::UCI{
 

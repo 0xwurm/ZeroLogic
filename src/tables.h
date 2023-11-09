@@ -1,6 +1,7 @@
 #pragma once
 #include "variables.h"
 #include <immintrin.h>
+#define PEXT(X, Y) _pext_u64(X, Y)
 
 namespace ZeroLogic::Lookup{
 
@@ -82,7 +83,7 @@ namespace ZeroLogic::Lookup{
                 do {
                     subset = (subset - rook_mask) & rook_mask;
                     map attacks = get_mask(true, subset, i, false);
-                    *(r_info[i].ptr + _pext_u64(subset, rook_mask)) = attacks;
+                    *(r_info[i].ptr + PEXT(subset, rook_mask)) = attacks;
                     index++;
                 } while (subset);
 
@@ -91,21 +92,21 @@ namespace ZeroLogic::Lookup{
                 do {
                     subset = (subset - bishop_mask) & bishop_mask;
                     map attacks = get_mask(false, subset, i, false);
-                    *(b_info[i].ptr + _pext_u64(subset, bishop_mask)) = attacks;
+                    *(b_info[i].ptr + PEXT(subset, bishop_mask)) = attacks;
                     index++;
                 } while (subset);
             }
         }
 
     COMPILETIME map r_atk(Square index, map occ){
-        return *(r_info[index].ptr + _pext_u64(occ, r_info[index].mask));
+        return *(r_info[index].ptr + PEXT(occ, r_info[index].mask));
     }
     COMPILETIME map r_xray(Square index, map occ){
         map attacked = r_atk(index, occ);
         return attacked ^ r_atk(index, (attacked & occ) ^ occ);
     }
     COMPILETIME map b_atk(Square index, map occ){
-        return *(b_info[index].ptr + _pext_u64(occ, b_info[index].mask));
+        return *(b_info[index].ptr + PEXT(occ, b_info[index].mask));
     }
     COMPILETIME map b_xray(Square index, map occ){
         map attacked = b_atk(index, occ);

@@ -120,7 +120,7 @@ namespace ZeroLogic::Boardstate {
     }
 
     template <Piece piece, bool white_move, bool taking>
-    FORCEINLINE static Board move(const Board& old_board, Bit from, Bit to){
+    FORCEINLINE static Board move(const Board& old_board, Bit& from, Bit& to){
         const map bp = old_board.BPawn, bn = old_board.BKnight, bb = old_board.BBishop, br = old_board.BRook, bq = old_board.BQueen, bk = old_board.BKing;
         const map wp = old_board.WPawn, wn = old_board.WKnight, wb = old_board.WBishop, wr = old_board.WRook, wq = old_board.WQueen, wk = old_board.WKing;
 
@@ -351,7 +351,7 @@ namespace ZeroLogic::Boardstate {
     };
 
     FORCEINLINE Bit ep_state(const move_container& mc){
-        if (mc.piece == PAWN && abs(static_cast<int>(_tzcnt_u64(mc.from)) - static_cast<int>(_tzcnt_u64(mc.to))) == 16)
+        if (mc.piece == PAWN && abs(static_cast<int>(SquareOf(mc.from)) - static_cast<int>(SquareOf(mc.to))) == 16)
             return mc.to;
         else
             return 0;
@@ -360,7 +360,7 @@ namespace ZeroLogic::Boardstate {
     FORCEINLINE State change_state(const move_container& mc){
         if (mc.castle_type != CASTLE_INVALID) return mc.state.no_castles();
         if (mc.ep) return mc.state.silent_move();
-        if (mc.piece == PAWN && abs(int(_tzcnt_u64(mc.from)) - int(_tzcnt_u64(mc.to))) == 16)
+        if (mc.piece == PAWN && abs(int(SquareOf(mc.from)) - int(SquareOf(mc.to))) == 16)
             return mc.state.new_ep_pawn();
 
         if (mc.state.white_move){
