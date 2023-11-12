@@ -26,7 +26,7 @@ At the moment the only usable feature is movegeneration. **Work in progress.**
 
 The application is only tested with windows and ndless, to compile for the latter some adjustments have to be made to the code. 
 Most importantly the macros *BitCount*, *SquareOf* and *Bitloop* defined in [gamestate.h](src/gamestate.h) and [eval.h](src/eval.h) have to be changed from intrinsics to their standart library equivallents.
-(PEXT does not have a std equivallent, use [this function](https://stackoverflow.com/a/21159523) instead) 
+(PEXT does not have an std equivallent, use [this function](https://stackoverflow.com/a/21159523) instead) 
 
 You will get some other errors on compilation, those are relatively trivial, you wont have any problems resovling them. (Multi platform compatibility is also a work in progress!!)
 
