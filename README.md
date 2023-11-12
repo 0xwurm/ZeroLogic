@@ -41,10 +41,10 @@ LDFLAGS = -Wl,--nspireio
 We reach a speed of up to 600 Meganodes per second per thread in Movegeneration (Tested on a Core i5-11400H). This is due to heavy use of function inlining and templates (see [gamestate.h](src/gamestate.h)).
 ```
 Overall nodes: 3195901860
-Time taken: 5537ms
-Mn/s: 577
-s/Mn: 0.00173266
-light distance equivalent: 0.519438 meters
+Time taken: 5485ms
+Mn/s: 582
+s/Mn: 0.00171657
+light distance equivalent: 0.514614 meters
 ```
 
 The calculator version is capable of generating ~2 Meganodes per second. (Tested on a TI-nspire CX II-T)
