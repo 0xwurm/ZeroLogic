@@ -19,6 +19,9 @@ position fen {fen}
 ```
 go perft {depth}
 ```
+```
+go depth {depth}
+```
 
 At the moment the only usable feature is movegeneration. **Work in progress.**
 
