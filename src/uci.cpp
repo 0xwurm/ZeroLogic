@@ -1,6 +1,9 @@
 #include "uci.h"
 #include "misc.h"
+#include "movegenerator.h"
+#include <chrono>
 #include "perft_callback.h"
+#include "search_callback.h"
 
 namespace ZeroLogic::UCI{
 
@@ -44,8 +47,9 @@ namespace ZeroLogic::UCI{
 
         while (is >> token)
 
-            if (token == "movetime") {
+            if (token == "depth") {
                 is >> token;
+                Search::go<state>(board, std::stoi(token), ep_target);
             }
             else if (token == "perft") {
                 is >> token;

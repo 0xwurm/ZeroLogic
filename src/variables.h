@@ -8,8 +8,9 @@ namespace ZeroLogic {
     typedef unsigned char u8;
     typedef unsigned short u16;
 
-	typedef unsigned long long map;
-    typedef unsigned long long Bit;
+	typedef unsigned long long u64;
+	typedef u64 map;
+    typedef u64 Bit;
     typedef unsigned char Square;
 
     static std::string start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -24,14 +25,11 @@ namespace ZeroLogic {
         CASTLE_INVALID = 5
     };
 
-	enum Result {
-		checkmate = 101,
-		stalemate = 102
-	};
-
-    enum Values{
-        mate = 32000,
-        draw = 0
+    enum eval : signed short{
+        DRAW = 0,
+        MATE = 32000,
+        ABSOLUTE_MIN = -0x7fff,
+        ABSOLUTE_MAX = 0x7fff
     };
 
 	enum BoardConstants : const map {

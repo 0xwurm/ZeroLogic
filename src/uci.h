@@ -1,6 +1,5 @@
 #pragma once
 #include "variables.h"
-#include "search.h"
 #include <sstream>
 
 namespace ZeroLogic::UCI {
