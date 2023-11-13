@@ -66,10 +66,10 @@ namespace ZeroLogic {
                  << " depth " << int(depth)
                  << " nodes " << nodecount
                  << " time " << duration_ms
-                 << " score cp " << evaluation
-                 << " bestmove " << bestmove;
+                 << " score cp " << evaluation;
 
-            std::cout << info.str() << std::endl << std::flush;
+            std::cout << info.str()                 << std::endl << std::flush;
+            std::cout << "bestmove " << bestmove   << std::endl << std::flush;
         }
 
         template <Piece promotion_to>

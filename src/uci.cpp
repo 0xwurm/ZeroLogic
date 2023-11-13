@@ -7,7 +7,7 @@
 
 namespace ZeroLogic::UCI{
 
-    std::string engine_info = "id name 0sama\nid author wurm\n";
+    std::string engine_info = "id name ZeroLogic 1\nid author wurm\n";
 
     void position(std::istringstream& is, Boardstate::Board*& board, Boardstate::State*& state, Bit& ep_target) {
 
