@@ -17,6 +17,10 @@ namespace ZeroLogic {
             u8 depth;
         };
 
+        template<bool white>
+        static FORCEINLINE void mate(vars& var){}
+        static FORCEINLINE void draw(vars& var){}
+
     private:
 
         static void init(u8& depth){

@@ -83,9 +83,10 @@ namespace ZeroLogic::Movegen{
     }
 
     template<State state, bool root, bool leaf, class Callback>
-    FORCEINLINE void king_moves(const Board& board, map& kingmoves, typename Callback::vars& vars){
+    FORCEINLINE void king_moves(const Board& board, map& kingmoves, typename Callback::vars& vars, bool& found_move){
         map kingcaptures = kingmoves & ColorPieces<!state.white_move>(board);
         kingmoves &= ~board.Occ;
+        if (kingmoves | kingcaptures) found_move = true;
         Callback::template kingmove<state, root, leaf>(board, kingmoves, kingcaptures, vars);
     }
 
@@ -171,7 +172,7 @@ namespace ZeroLogic::Movegen{
 
     // enumerator for check-positions
     template <State state, bool root, bool leaf, class Callback>
-    FORCEINLINE void _enumerate_check(const Board& board, const map& checkmask, const map& pin_rook, const map& pin_bishop, typename Callback::vars& var, Bit& ep_target){
+    FORCEINLINE void _enumerate_check(const Board& board, const map& checkmask, const map& pin_rook, const map& pin_bishop, typename Callback::vars& var, Bit& ep_target, bool& found_move){
         constexpr bool us = state.white_move;
         constexpr bool enemy = !us;
         const map no_pin = ~(pin_rook | pin_bishop);
@@ -188,6 +189,7 @@ namespace ZeroLogic::Movegen{
             map pp = pawn_forward<us>(pf & third_rank<us>()) & ~board.Occ & checkmask; pf &= checkmask;
             map pf_promo = pf & last_rank<us>(); pf &= not_last_rank<us>();
 
+            if (pr | pl | pr_promo | pl_promo | pf | pp | pf_promo) found_move = true;
             Callback::template pawn_move<state, root, leaf>(board, pr, pl, pr_promo, pl_promo, pf, pp, pf_promo, var);
             if (Callback::prune()) { Callback::reset_prune(); return; }
 
@@ -195,6 +197,8 @@ namespace ZeroLogic::Movegen{
                 if (ep_target){
                     Bit lep = not_pinned & ~A_FILE & ((ep_target & checkmask) >> 1);
                     Bit rep = not_pinned & ~H_FILE & ((ep_target & checkmask) << 1);
+
+                    if (rep | lep) found_move = true;
 
                     Callback::template ep_move<state, root, leaf>(board, lep, rep, ep_target, var);
                     if (Callback::prune()) { Callback::reset_prune(); return; }
@@ -210,6 +214,7 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::knight[sq] & checkmask;
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
+                if (moves | captures) found_move = true;
                 Callback::template silent_move<state, KNIGHT, root, leaf>(board, moves, captures, sq, var);
                 if (Callback::prune()) { Callback::reset_prune(); return; }
             }
@@ -225,6 +230,7 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::b_atk(sq, board.Occ) & checkmask;
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
+                if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template silent_move<state, BISHOP, root, leaf>(board, moves, captures, sq, var);
                 if (Callback::prune()) { Callback::reset_prune(); return; }
@@ -239,6 +245,7 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::r_atk(sq, board.Occ) & checkmask;
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
+                if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template rookmove<state, root, leaf>(board, moves, captures, sq, var);
                 if (Callback::prune()) { Callback::reset_prune(); return; }
@@ -248,7 +255,7 @@ namespace ZeroLogic::Movegen{
 
     // enumerator for non-check-positions
     template <State state, bool root, bool leaf, class Callback>
-    FORCEINLINE void _enumerate(const Board& board, const map& pin_rook, const map& pin_bishop, typename Callback::vars& var, Bit& ep_target, const map& kingban){
+    FORCEINLINE void _enumerate(const Board& board, const map& pin_rook, const map& pin_bishop, typename Callback::vars& var, Bit& ep_target, const map& kingban, bool& found_move){
         constexpr bool us = state.white_move;
         constexpr bool enemy = !us;
         const map no_pin = ~(pin_rook | pin_bishop);
@@ -256,11 +263,13 @@ namespace ZeroLogic::Movegen{
         // castles
         if constexpr (state.can_oo<us>())
             if (State::short_legal<us>(board.Occ, Rooks<us>(board), kingban)) {
+                found_move = true;
                 Callback::template castlemove<state, false, root, leaf>(board, var);
                 if (Callback::prune()) { Callback::reset_prune(); return; }
             }
         if constexpr (state.can_ooo<us>())
             if (State::long_legal<us>(board.Occ, Rooks<us>(board), kingban)) {
+                found_move = true;
                 Callback::template castlemove<state, true, root, leaf>(board, var);
                 if (Callback::prune()) { Callback::reset_prune(); return; }
             }
@@ -280,6 +289,7 @@ namespace ZeroLogic::Movegen{
             map pf_promo = pf & last_rank<us>(); pf &= not_last_rank<us>();
             map pp = pawn_forward<us>(pf & third_rank<us>()) & ~board.Occ;
 
+            if (pr | pl | pr_promo | pf | pf_promo | pp) found_move = true;
             Callback::template pawn_move<state, root, leaf>(board, pr, pl, pr_promo, pl_promo, pf, pp, pf_promo, var);
             if (Callback::prune()) { Callback::reset_prune(); return; }
 
@@ -290,6 +300,8 @@ namespace ZeroLogic::Movegen{
 
                     if (rep & pin_bishop) rep = pawn_atk_right<us>(rep) & pin_bishop;
                     if (lep & pin_bishop) lep = pawn_atk_left<us>(lep) & pin_bishop;
+
+                    if (rep | lep) found_move = true;
 
                     Callback::template ep_move<state, root, leaf>(board, lep, rep, ep_target, var);
                     if (Callback::prune()) { Callback::reset_prune(); return; }
@@ -305,6 +317,7 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::knight[sq];
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
+                if (moves | captures) found_move = true;
                 Callback::template silent_move<state, KNIGHT, root, leaf>(board, moves, captures, sq, var);
                 if (Callback::prune()) { Callback::reset_prune(); return; }
             }
@@ -322,6 +335,7 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::b_atk(sq, board.Occ) & pin_bishop;
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
+                if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template silent_move<state, BISHOP, root, leaf>(board, moves, captures, sq, var);
                 if (Callback::prune()) { Callback::reset_prune(); return; }
@@ -331,6 +345,7 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::b_atk(sq, board.Occ);
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
+                if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template silent_move<state, BISHOP, root, leaf>(board, moves, captures, sq, var);
                 if (Callback::prune()) { Callback::reset_prune(); return; }
@@ -347,6 +362,7 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::r_atk(sq, board.Occ) & pin_rook;
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
+                if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template rookmove<state, root, leaf>(board, moves, captures, sq, var);
                 if (Callback::prune()) { Callback::reset_prune(); return; }
@@ -356,6 +372,7 @@ namespace ZeroLogic::Movegen{
                 map moves = Lookup::r_atk(sq, board.Occ);
                 map captures = moves & ColorPieces<enemy>(board);
                 moves &= ~board.Occ;
+                if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template rookmove<state, root, leaf>(board, moves, captures, sq, var);
                 if (Callback::prune()) { Callback::reset_prune(); return; }
@@ -365,27 +382,39 @@ namespace ZeroLogic::Movegen{
     }
 
     template <State state, bool root, class Callback>
-    void enumerate(const Board& board, typename Callback::vars& vars, Bit ep_target){
+    void enumerate(const Board& board, typename Callback::vars& var, Bit ep_target){
         const map king = King<state.white_move>(board);
         map rook_pin = 0, bishop_pin = 0, kingban = 0, checkmask, kingmoves;
         make_masks<state>(board, king, checkmask, kingban, rook_pin, bishop_pin, kingmoves, ep_target);
-        if (vars.depth == 1){
-            king_moves<state, root, true, Callback>(board, kingmoves, vars);
+        bool found_move = false;
+
+        if (var.depth == 1){
+            king_moves<state, root, true, Callback>(board, kingmoves, var, found_move);
             if (Callback::prune()) { Callback::reset_prune(); return; }
-            if (checkmask == full)
-                _enumerate<state, root, true, Callback>(board, rook_pin, bishop_pin, vars, ep_target, kingban);
-            else if (checkmask)
-                _enumerate_check<state, root, true, Callback>(board, checkmask, rook_pin, bishop_pin, vars, ep_target);
-            // else double check
+            if (checkmask == full) {
+                _enumerate<state, root, true, Callback>(board, rook_pin, bishop_pin, var, ep_target, kingban,found_move);
+                if (!found_move) Callback::draw(var);
+            }
+            else if (checkmask) {
+                _enumerate_check<state, root, true, Callback>(board, checkmask, rook_pin, bishop_pin, var, ep_target,found_move);
+                if (!found_move) Callback::template mate<state.white_move>(var);
+            }
+            else if (!found_move)
+                Callback::template mate<state.white_move>(var);
         }
         else {
-            king_moves<state, root, false, Callback>(board, kingmoves, vars);
+            king_moves<state, root, false, Callback>(board, kingmoves, var, found_move);
             if (Callback::prune()) { Callback::reset_prune(); return; }
-            if (checkmask == full)
-                _enumerate<state, root, false, Callback>(board, rook_pin, bishop_pin, vars, ep_target, kingban);
-            else if (checkmask)
-                _enumerate_check<state, root, false, Callback>(board, checkmask, rook_pin, bishop_pin, vars, ep_target);
-            // else double check
+            if (checkmask == full) {
+                _enumerate<state, root, false, Callback>(board, rook_pin, bishop_pin, var, ep_target, kingban, found_move);
+                if (!found_move) Callback::draw(var);
+            }
+            else if (checkmask) {
+                _enumerate_check<state, root, false, Callback>(board, checkmask, rook_pin, bishop_pin, var, ep_target, found_move);
+                if (!found_move) Callback::template mate<state.white_move>(var);
+            }
+            else if (!found_move)
+                Callback::template mate<state.white_move>(var);
         }
     }
 

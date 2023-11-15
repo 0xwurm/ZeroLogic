@@ -27,7 +27,8 @@ namespace ZeroLogic {
 
     enum eval : signed short{
         DRAW = 0,
-        MATE = 32000,
+        MATE_POS = 32000,
+        MATE_NEG = -32000,
         ABSOLUTE_MIN = -0x7fff,
         ABSOLUTE_MAX = 0x7fff
     };

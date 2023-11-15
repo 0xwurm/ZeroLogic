@@ -4,14 +4,15 @@ namespace ZeroLogic {
     using namespace Boardstate;
     using namespace Movegen;
 
-    static u64 nodecount;
-    static std::string bestmove;
-    static bool better_root_move;
-    static bool cutoff;
-
     class Search {
 
     public:
+
+        static inline u64 nodecount;
+        static inline std::string bestmove;
+        static inline bool better_root_move;
+        static inline bool cutoff;
+        static inline u8 full_depth;
 
         static bool prune(){
             return cutoff;
@@ -28,7 +29,7 @@ namespace ZeroLogic {
             template<bool root>
             FORCEINLINE void test(eval& val){
                 if (val > alpha) {
-                    alpha = static_cast<eval>(-val);
+                    alpha = val;
                     if (alpha >= beta)
                         cutoff = true;
 
@@ -37,14 +38,24 @@ namespace ZeroLogic {
             }
         };
 
+        template<bool white>
+        static FORCEINLINE void mate(vars& var){
+            if constexpr (white)    var.alpha = eval(MATE_POS + (full_depth - var.depth));
+            else                    var.alpha = eval(MATE_NEG - (full_depth - var.depth));
+        }
+        static FORCEINLINE void draw(vars& var){
+            var.alpha = DRAW;
+        }
+
     private:
 
-        static void init(){
+        static void init(u8 depth){
             nodecount = 0;
             start_time = std::chrono::steady_clock::now();
             bestmove = "invalid move";
             better_root_move = false;
             cutoff = false;
+            full_depth = depth;
         }
 
         static FORCEINLINE void count(const map moves){
@@ -57,18 +68,18 @@ namespace ZeroLogic {
             ++nodecount;
         }
 
-        static FORCEINLINE void display_info(u8 depth, eval evaluation) {
+        static void display_info(u8 depth, eval evaluation) {
             auto duration = std::chrono::steady_clock::now() - start_time;
             auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
 
             std::stringstream info;
             info << "info"
-                 << " depth " << int(depth)
-                 << " nodes " << nodecount
-                 << " time " << duration_ms
-                 << " score cp " << evaluation;
+                 << " depth "   << int(depth)
+                 << " nodes "   << nodecount
+                 << " time "    << duration_ms
+                 << Misc::uci_eval(eval(-evaluation));
 
-            std::cout << info.str()                 << std::endl << std::flush;
+            std::cout << info.str()                << std::endl << std::flush;
             std::cout << "bestmove " << bestmove   << std::endl << std::flush;
         }
 
@@ -181,7 +192,7 @@ namespace ZeroLogic {
 
         template<State state>
         static void go(const Board& board, u8 depth, Bit ep_target){
-            init();
+            init(depth);
             vars var = {depth, ABSOLUTE_MIN, ABSOLUTE_MAX};
             enumerate<state, true, Search>(board, var, ep_target);
             display_info(depth, var.alpha);

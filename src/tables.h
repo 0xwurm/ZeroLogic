@@ -10,7 +10,7 @@ namespace ZeroLogic::Lookup{
         map mask;
     };
 
-    enum Borders : const map {
+    enum Borders {
         north = 0xff00000000000000,
         south = 0xff,
         east = 0x101010101010101,

@@ -69,5 +69,13 @@ namespace ZeroLogic::Misc{
         return {state, board, piece, promotion_to, capture, CASTLE_INVALID, from, to, false};
 
     }
+
+    static std::string uci_eval(eval val){
+        std::stringstream output;
+        if      (val >= MATE_POS)   output << " mate "   << (val - MATE_POS);
+        else if (val <= MATE_NEG)   output << " mate "   << (val + MATE_POS);
+        else                        output << " score "  << val;
+        return output.str();
+    }
 }
 
