@@ -6,7 +6,7 @@
 
 namespace ZeroLogic {
     typedef unsigned char u8;
-    typedef unsigned short u16;
+    typedef signed short s16;
 
 	typedef unsigned long long u64;
 	typedef u64 map;
@@ -32,6 +32,10 @@ namespace ZeroLogic {
         ABSOLUTE_MIN = -0x7fff,
         ABSOLUTE_MAX = 0x7fff
     };
+
+    inline eval operator -(eval& val){
+        return eval(s16(-1) * s16(val));
+    }
 
 	enum BoardConstants : const map {
 		A_FILE = 0x8080808080808080,    FIRST_RANK = 0xff,

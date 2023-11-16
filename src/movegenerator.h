@@ -191,7 +191,7 @@ namespace ZeroLogic::Movegen{
 
             if (pr | pl | pr_promo | pl_promo | pf | pp | pf_promo) found_move = true;
             Callback::template pawn_move<state, root, leaf>(board, pr, pl, pr_promo, pl_promo, pf, pp, pf_promo, var);
-            if (Callback::prune()) { Callback::reset_prune(); return; }
+            if (Callback::prune()) { Callback::reset_prune(var); return; }
 
             if constexpr (state.has_ep_pawn){
                 if (ep_target){
@@ -201,7 +201,7 @@ namespace ZeroLogic::Movegen{
                     if (rep | lep) found_move = true;
 
                     Callback::template ep_move<state, root, leaf>(board, lep, rep, ep_target, var);
-                    if (Callback::prune()) { Callback::reset_prune(); return; }
+                    if (Callback::prune()) { Callback::reset_prune(var); return; }
                 }
             }
         }
@@ -216,7 +216,7 @@ namespace ZeroLogic::Movegen{
                 moves &= ~board.Occ;
                 if (moves | captures) found_move = true;
                 Callback::template silent_move<state, KNIGHT, root, leaf>(board, moves, captures, sq, var);
-                if (Callback::prune()) { Callback::reset_prune(); return; }
+                if (Callback::prune()) { Callback::reset_prune(var); return; }
             }
         }
 
@@ -233,7 +233,7 @@ namespace ZeroLogic::Movegen{
                 if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template silent_move<state, BISHOP, root, leaf>(board, moves, captures, sq, var);
-                if (Callback::prune()) { Callback::reset_prune(); return; }
+                if (Callback::prune()) { Callback::reset_prune(var); return; }
             }
         }
         // rooks & queens
@@ -248,7 +248,7 @@ namespace ZeroLogic::Movegen{
                 if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template rookmove<state, root, leaf>(board, moves, captures, sq, var);
-                if (Callback::prune()) { Callback::reset_prune(); return; }
+                if (Callback::prune()) { Callback::reset_prune(var); return; }
             }
         }
     }
@@ -265,13 +265,13 @@ namespace ZeroLogic::Movegen{
             if (State::short_legal<us>(board.Occ, Rooks<us>(board), kingban)) {
                 found_move = true;
                 Callback::template castlemove<state, false, root, leaf>(board, var);
-                if (Callback::prune()) { Callback::reset_prune(); return; }
+                if (Callback::prune()) { Callback::reset_prune(var); return; }
             }
         if constexpr (state.can_ooo<us>())
             if (State::long_legal<us>(board.Occ, Rooks<us>(board), kingban)) {
                 found_move = true;
                 Callback::template castlemove<state, true, root, leaf>(board, var);
-                if (Callback::prune()) { Callback::reset_prune(); return; }
+                if (Callback::prune()) { Callback::reset_prune(var); return; }
             }
 
         // pawns
@@ -291,7 +291,7 @@ namespace ZeroLogic::Movegen{
 
             if (pr | pl | pr_promo | pf | pf_promo | pp) found_move = true;
             Callback::template pawn_move<state, root, leaf>(board, pr, pl, pr_promo, pl_promo, pf, pp, pf_promo, var);
-            if (Callback::prune()) { Callback::reset_prune(); return; }
+            if (Callback::prune()) { Callback::reset_prune(var); return; }
 
             if constexpr (state.has_ep_pawn){
                 if (ep_target & ~pin_bishop){
@@ -304,7 +304,7 @@ namespace ZeroLogic::Movegen{
                     if (rep | lep) found_move = true;
 
                     Callback::template ep_move<state, root, leaf>(board, lep, rep, ep_target, var);
-                    if (Callback::prune()) { Callback::reset_prune(); return; }
+                    if (Callback::prune()) { Callback::reset_prune(var); return; }
                 }
             }
         }
@@ -319,7 +319,7 @@ namespace ZeroLogic::Movegen{
                 moves &= ~board.Occ;
                 if (moves | captures) found_move = true;
                 Callback::template silent_move<state, KNIGHT, root, leaf>(board, moves, captures, sq, var);
-                if (Callback::prune()) { Callback::reset_prune(); return; }
+                if (Callback::prune()) { Callback::reset_prune(var); return; }
             }
         }
 
@@ -338,7 +338,7 @@ namespace ZeroLogic::Movegen{
                 if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template silent_move<state, BISHOP, root, leaf>(board, moves, captures, sq, var);
-                if (Callback::prune()) { Callback::reset_prune(); return; }
+                if (Callback::prune()) { Callback::reset_prune(var); return; }
             }
             Bitloop(not_pinned){
                 const Square sq = SquareOf(not_pinned);
@@ -348,7 +348,7 @@ namespace ZeroLogic::Movegen{
                 if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template silent_move<state, BISHOP, root, leaf>(board, moves, captures, sq, var);
-                if (Callback::prune()) { Callback::reset_prune(); return; }
+                if (Callback::prune()) { Callback::reset_prune(var); return; }
             }
         }
         // rooks & queens
@@ -365,7 +365,7 @@ namespace ZeroLogic::Movegen{
                 if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template rookmove<state, root, leaf>(board, moves, captures, sq, var);
-                if (Callback::prune()) { Callback::reset_prune(); return; }
+                if (Callback::prune()) { Callback::reset_prune(var); return; }
             }
             Bitloop(not_pinned){
                 const Square sq = SquareOf(not_pinned);
@@ -375,7 +375,7 @@ namespace ZeroLogic::Movegen{
                 if (moves | captures) found_move = true;
                 if (1ull << sq & queens)    Callback::template silent_move<state, QUEEN, root, leaf>(board, moves, captures, sq, var);
                 else                        Callback::template rookmove<state, root, leaf>(board, moves, captures, sq, var);
-                if (Callback::prune()) { Callback::reset_prune(); return; }
+                if (Callback::prune()) { Callback::reset_prune(var); return; }
             }
         }
 
@@ -390,7 +390,7 @@ namespace ZeroLogic::Movegen{
 
         if (var.depth == 1){
             king_moves<state, root, true, Callback>(board, kingmoves, var, found_move);
-            if (Callback::prune()) { Callback::reset_prune(); return; }
+            if (Callback::prune()) { Callback::reset_prune(var); return; }
             if (checkmask == full) {
                 _enumerate<state, root, true, Callback>(board, rook_pin, bishop_pin, var, ep_target, kingban,found_move);
                 if (!found_move) Callback::draw(var);
@@ -404,7 +404,7 @@ namespace ZeroLogic::Movegen{
         }
         else {
             king_moves<state, root, false, Callback>(board, kingmoves, var, found_move);
-            if (Callback::prune()) { Callback::reset_prune(); return; }
+            if (Callback::prune()) { Callback::reset_prune(var); return; }
             if (checkmask == full) {
                 _enumerate<state, root, false, Callback>(board, rook_pin, bishop_pin, var, ep_target, kingban, found_move);
                 if (!found_move) Callback::draw(var);
@@ -416,6 +416,7 @@ namespace ZeroLogic::Movegen{
             else if (!found_move)
                 Callback::template mate<state.white_move>(var);
         }
+        Callback::negate(var);
     }
 
     COMPILETIME void init_lookup(){

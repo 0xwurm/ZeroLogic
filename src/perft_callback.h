@@ -153,7 +153,8 @@ namespace ZeroLogic {
         static bool prune(){
             return false;
         }
-        static void reset_prune(){}
+        static void reset_prune(vars& var){}
+        static void negate(vars& var){}
 
         template<State state, bool root, bool leaf>
         static FORCEINLINE void kingmove(const Board& board, map& moves, map& captures, vars& vars){

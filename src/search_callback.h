@@ -14,13 +14,6 @@ namespace ZeroLogic {
         static inline bool cutoff;
         static inline u8 full_depth;
 
-        static bool prune(){
-            return cutoff;
-        }
-        static void reset_prune(){
-            cutoff = false;
-        }
-
         struct vars{
             u8 depth;
             eval alpha;
@@ -30,7 +23,7 @@ namespace ZeroLogic {
             FORCEINLINE void test(eval& val){
                 if (val > alpha) {
                     alpha = val;
-                    if (alpha >= beta)
+                    if (val >= beta)
                         cutoff = true;
 
                     if constexpr (root) better_root_move = true;
@@ -38,10 +31,21 @@ namespace ZeroLogic {
             }
         };
 
+        static bool prune(){
+            return cutoff;
+        }
+        static void reset_prune(vars& var){
+            cutoff = false;
+            var.alpha = -var.alpha;
+        }
+        static void negate(vars& var){
+            var.alpha = -var.alpha;
+        }
+
         template<bool white>
         static FORCEINLINE void mate(vars& var){
-            if constexpr (white)    var.alpha = eval(MATE_POS + (full_depth - var.depth));
-            else                    var.alpha = eval(MATE_NEG - (full_depth - var.depth));
+            if constexpr (white)    var.alpha = eval(MATE_NEG - (full_depth - var.depth));
+            else                    var.alpha = eval(MATE_POS + (full_depth - var.depth));
         }
         static FORCEINLINE void draw(vars& var){
             var.alpha = DRAW;
@@ -70,7 +74,7 @@ namespace ZeroLogic {
 
         static void display_info(u8 depth, eval evaluation) {
             auto duration = std::chrono::steady_clock::now() - start_time;
-            auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+            auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
 
             std::stringstream info;
             info << "info"
@@ -94,11 +98,11 @@ namespace ZeroLogic {
         template<State new_state, bool leaf, bool root>
         static FORCEINLINE void _any_move(const Board& new_board, Bit ep_target, vars& var){
             if constexpr (leaf) {
-                eval val = Eval::evaluate(new_board);
+                eval val = Eval::evaluate<new_state.white_move>(new_board);
                 var.test<root>(val);
             }
             else{
-                vars new_var = {u8(var.depth - 1), eval(-var.beta), eval(-var.alpha)};
+                vars new_var = {u8(var.depth - 1), -var.beta, -var.alpha};
                 enumerate<new_state, false, Search>(new_board, new_var, ep_target);
                 var.test<root>(new_var.alpha);
             }
@@ -139,11 +143,11 @@ namespace ZeroLogic {
             const Board new_board = move<ROOK, us, capture>(board, from, to);
             
             if constexpr (leaf) {
-                eval val = Eval::evaluate(new_board);
+                eval val = Eval::evaluate<!state.white_move>(new_board);
                 var.test<root>(val);
             }
             else {
-                vars new_var = {u8(var.depth - 1), eval(-var.beta), eval(-var.alpha)};
+                vars new_var = {u8(var.depth - 1), -var.beta, -var.alpha};
                 [&]() {
                     if constexpr (state.can_oo<us>()) {
                         if (state.is_rook_right<us>(from)) {
