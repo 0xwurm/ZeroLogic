@@ -375,30 +375,38 @@ namespace ZeroLogic::Movegen{
         bool found_move = false;
 
         if (var.depth == 1){
-            king_moves<state, root, true, Callback>(board, kingmoves, var, found_move);
             if (checkmask == full) {
                 _enumerate<state, root, true, Callback>(board, rook_pin, bishop_pin, var, ep_target, kingban,found_move);
+                king_moves<state, root, true, Callback>(board, kingmoves, var, found_move);
                 if (!found_move) Callback::draw(var);
             }
             else if (checkmask) {
                 _enumerate_check<state, root, true, Callback>(board, checkmask, rook_pin, bishop_pin, var, ep_target,found_move);
-                if (!found_move) Callback::template mate<state.white_move>(var);
+                king_moves<state, root, true, Callback>(board, kingmoves, var, found_move);
+                if (!found_move) Callback::mate(var);
             }
-            else if (!found_move) Callback::template mate<state.white_move>(var);
+            else{
+                king_moves<state, root, true, Callback>(board, kingmoves, var, found_move);
+                if (!found_move) Callback::mate(var);
+            }
         }
         else {
-            king_moves<state, root, false, Callback>(board, kingmoves, var, found_move);
             if (checkmask == full) {
                 _enumerate<state, root, false, Callback>(board, rook_pin, bishop_pin, var, ep_target, kingban, found_move);
+                king_moves<state, root, false, Callback>(board, kingmoves, var, found_move);
                 if (!found_move) Callback::draw(var);
             }
             else if (checkmask) {
                 _enumerate_check<state, root, false, Callback>(board, checkmask, rook_pin, bishop_pin, var, ep_target, found_move);
-                if (!found_move) Callback::template mate<state.white_move>(var);
+                king_moves<state, root, false, Callback>(board, kingmoves, var, found_move);
+                if (!found_move) Callback::mate(var);
             }
-            else if (!found_move) Callback::template mate<state.white_move>(var);
+            else {
+                king_moves<state, root, false, Callback>(board, kingmoves, var, found_move);
+                if (!found_move) Callback::mate(var);
+            }
         }
-        Callback::end_routine(var, board);
+        if (found_move) Callback::end_routine(var, board);
     }
 
     COMPILETIME void init_lookup(){
