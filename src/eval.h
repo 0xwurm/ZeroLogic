@@ -7,7 +7,6 @@ namespace ZeroLogic::Eval{
     // eval in centipawns
     template <bool white>
     FORCEINLINE static eval evaluate(const Boardstate::Board& board){
-        return eval(0);
         u64 val =   BitCount(board.WPawn) - BitCount(board.BPawn);
             val +=  3 * (BitCount(board.WBishop | board.WKnight) - BitCount(board.BBishop | board.BKnight));
             val +=  5 * (BitCount(board.WRook) - BitCount(board.BRook));

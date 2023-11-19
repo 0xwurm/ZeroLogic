@@ -1,6 +1,4 @@
 #pragma once
-#include "variables.h"
-#include <sstream>
 #include "misc.h"
 #include "movegenerator.h"
 #include <chrono>

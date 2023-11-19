@@ -1,5 +1,4 @@
 #pragma once
-#include "gamestate.h"
 #include "tables.h"
 #include "eval.h"
 
