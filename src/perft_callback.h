@@ -20,6 +20,7 @@ namespace ZeroLogic {
         template<bool white>
         static FORCEINLINE void mate(vars& var){}
         static FORCEINLINE void draw(vars& var){}
+        static FORCEINLINE void end_routine(vars& var, const Board board){}
 
     private:
 
@@ -71,7 +72,7 @@ namespace ZeroLogic {
         }
 
         template<State state, bool capture, bool root>
-        static FORCEINLINE void _kingmove(const Board& board, Bit& from, Bit to, u8& depth){
+        static void _kingmove(const Board& board, Bit& from, Bit to, u8& depth){
             const Board new_board = move<KING, state.white_move, capture>(board, from, to);
             vars new_var = {u8(depth - 1)};
             enumerate<state.no_castles(), false, Perft>(new_board, new_var, 0);
@@ -79,7 +80,7 @@ namespace ZeroLogic {
         }
 
         template<State state, CastleType type, bool root>
-        static FORCEINLINE void _castlemove(const Board& board, u8& depth){
+        static void _castlemove(const Board& board, u8& depth){
             const Board new_board = castle_move<type>(board);
             vars new_var = {u8(depth - 1)};
             enumerate<state.no_castles(), false, Perft>(new_board, new_var, 0);
@@ -87,7 +88,7 @@ namespace ZeroLogic {
         }
 
         template<State state, bool capture, Piece piece, bool root>
-        static FORCEINLINE void _silent_move(const Board& board, Bit from, Bit to, u8& depth){
+        static void _silent_move(const Board& board, Bit from, Bit to, u8& depth){
             const Board new_board = move<piece, state.white_move, capture>(board, from, to);
             vars new_var = {u8(depth - 1)};
             enumerate<state.silent_move(), false, Perft>(new_board, new_var, 0);
@@ -95,7 +96,7 @@ namespace ZeroLogic {
         }
 
         template<State state, bool capture, bool root>
-        static FORCEINLINE void _rookmove(const Board& board, Bit from, Bit to, u8& depth){
+        static void _rookmove(const Board& board, Bit from, Bit to, u8& depth){
             constexpr bool us = state.white_move;
             const Board new_board = move<ROOK, us, capture>(board, from, to);
             [&](){
@@ -117,7 +118,7 @@ namespace ZeroLogic {
         }
 
         template<State state, bool root>
-        static FORCEINLINE void _ep_move(const Board& board, Bit& from, Bit to, Bit& ep_target, u8& depth){
+        static void _ep_move(const Board& board, Bit& from, Bit to, Bit& ep_target, u8& depth){
             const Board new_board = Boardstate::ep_move<state.white_move>(board, from | to, ep_target);
             vars new_var = {u8(depth - 1)};
             enumerate<state.silent_move(), false, Perft>(new_board, new_var, 0);
@@ -125,7 +126,7 @@ namespace ZeroLogic {
         }
 
         template<State state, bool root>
-        static FORCEINLINE void _pawn_push(const Board& board, Bit from, Bit to, u8& depth){
+        static void _pawn_push(const Board& board, Bit from, Bit to, u8& depth){
             const Board new_board = move<PAWN, state.white_move, false>(board, from, to);
             vars new_var = {u8(depth - 1)};
             enumerate<state.new_ep_pawn(), false, Perft>(new_board, new_var, to);
@@ -133,7 +134,7 @@ namespace ZeroLogic {
         }
 
         template<State state, Piece promotion_to, bool capture, bool root>
-        static FORCEINLINE void _promotion_move(const Board& board, Bit& from, Bit& to, u8& depth){
+        static void _promotion_move(const Board& board, Bit& from, Bit& to, u8& depth){
             const Board new_board = promotion_move<promotion_to, state.white_move, capture>(board, from, to);
             vars new_var = {u8(depth - 1)};
             enumerate<state.silent_move(), false, Perft>(new_board, new_var, 0);
@@ -149,12 +150,6 @@ namespace ZeroLogic {
             enumerate<state, true, Perft>(board, var, ep_target);
             display_info();
         }
-
-        static bool prune(){
-            return false;
-        }
-        static void reset_prune(vars& var){}
-        static void negate(vars& var){}
 
         template<State state, bool root, bool leaf>
         static FORCEINLINE void kingmove(const Board& board, map& moves, map& captures, vars& vars){

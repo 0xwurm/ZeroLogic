@@ -14,6 +14,13 @@ namespace ZeroLogic {
         static inline bool cutoff;
         static inline u8 full_depth;
 
+
+        struct _vals{
+            Bit from;
+            Bit to;
+            Bit ep_target;
+        };
+
         struct vars{
             u8 depth;
             eval alpha;
@@ -29,18 +36,43 @@ namespace ZeroLogic {
                     if constexpr (root) better_root_move = true;
                 }
             }
+
+            u8 num_moves1;
+            void (*priority1[100])(vars&, const Board&, _vals&); // cheap recapture
+            _vals pr1_vals[100];
+            u8 num_moves2;
+            void (*priority2[100])(vars&, const Board&, _vals&); // capture
+            _vals pr2_vals[100];
+            u8 num_moves3;
+            void (*priority3[100])(vars&, const Board&, _vals&); // other
+            _vals pr3_vals[100];
         };
 
-        static bool prune(){
-            return cutoff;
+#define if_cutoff \
+        if (cutoff) {   \
+        var.alpha = -var.alpha; \
+        cutoff = false; \
+        return; \
         }
-        static void reset_prune(vars& var){
-            cutoff = false;
+
+        static FORCEINLINE void end_routine(vars& var, const Board board){
+            for (u8 i = 0; i != var.num_moves1; ++i) {
+                var.priority1[i](var, board, var.pr1_vals[i]);
+                if_cutoff
+            }
+            for (u8 i = 0; i != var.num_moves2; ++i) {
+                var.priority2[i](var, board, var.pr2_vals[i]);
+                if_cutoff
+            }
+            for (u8 i = 0; i != var.num_moves3; ++i) {
+                var.priority3[i](var, board, var.pr3_vals[i]);
+                if_cutoff
+            }
+
             var.alpha = -var.alpha;
         }
-        static void negate(vars& var){
-            var.alpha = -var.alpha;
-        }
+
+#undef if_cutoff
 
         template<bool white>
         static FORCEINLINE void mate(vars& var){
@@ -109,15 +141,15 @@ namespace ZeroLogic {
         }
 
         template<State state, bool capture, bool leaf, bool root>
-        static FORCEINLINE void _kingmove(const Board& board, Bit& from, Bit to, vars& var) {
-            const Board new_board = move<KING, state.white_move, capture>(board, from, to);
+        static void _kingmove(vars& var, const Board& board, _vals& val) {
+            const Board new_board = move<KING, state.white_move, capture>(board, val.from, val.to);
             _any_move<state.no_castles(), leaf, root>(new_board, 0, var);
 
-            if constexpr (root) _bestmove<PIECE_INVALID>(from, to);
+            if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
         }
 
         template<State state, CastleType type, bool leaf, bool root>
-        static FORCEINLINE void _castlemove(const Board& board, vars& var){
+        static void _castlemove(vars& var, const Board& board, _vals& val){
             const Board new_board = castle_move<type>(board);
             _any_move<state.no_castles(), leaf, root>(new_board, 0, var);
 
@@ -130,32 +162,32 @@ namespace ZeroLogic {
         }
 
         template<State state, bool capture, Piece piece, bool leaf, bool root>
-        static FORCEINLINE void _silent_move(const Board& board, Bit from, Bit to, vars& var){
-            const Board new_board = move<piece, state.white_move, capture>(board, from, to);
+        static void _silent_move(vars& var, const Board& board, _vals& val){
+            const Board new_board = move<piece, state.white_move, capture>(board, val.from, val.to);
             _any_move<state.silent_move(), leaf, root>(new_board, 0, var);
 
-            if constexpr (root) _bestmove<PIECE_INVALID>(from, to);
+            if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
         }
 
         template<State state, bool capture, bool leaf, bool root>
-        static FORCEINLINE void _rookmove(const Board& board, Bit from, Bit to, vars& var){
+        static void _rookmove(vars& var, const Board& board, _vals& val){
             constexpr bool us = state.white_move;
-            const Board new_board = move<ROOK, us, capture>(board, from, to);
+            const Board new_board = move<ROOK, us, capture>(board, val.from, val.to);
             
             if constexpr (leaf) {
-                eval val = Eval::evaluate<!state.white_move>(new_board);
-                var.test<root>(val);
+                eval pos_val = Eval::evaluate<!state.white_move>(new_board);
+                var.test<root>(pos_val);
             }
             else {
                 vars new_var = {u8(var.depth - 1), -var.beta, -var.alpha};
                 [&]() {
                     if constexpr (state.can_oo<us>()) {
-                        if (state.is_rook_right<us>(from)) {
+                        if (state.is_rook_right<us>(val.from)) {
                             enumerate<state.no_oo<us>(), false, Search>(new_board, new_var, 0);
                             return;
                         }
                     } else if constexpr (state.can_ooo<us>()) {
-                        if (state.is_rook_left<us>(from)) {
+                        if (state.is_rook_left<us>(val.from)) {
                             enumerate<state.no_ooo<us>(), false, Search>(new_board, new_var, 0);
                             return;
                         }
@@ -165,31 +197,31 @@ namespace ZeroLogic {
                 var.test<root>(new_var.alpha);
             }
 
-            if constexpr (root) _bestmove<PIECE_INVALID>(from, to);
+            if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
         }
 
         template<State state, bool leaf, bool root>
-        static FORCEINLINE void _ep_move(const Board& board, Bit& from, Bit to, Bit& ep_target, vars& var){
-            const Board new_board = Boardstate::ep_move<state.white_move>(board, from | to, ep_target);
+        static void _ep_move(vars& var, const Board& board, _vals& val){
+            const Board new_board = Boardstate::ep_move<state.white_move>(board, val.from | val.to, val.ep_target);
             _any_move<state.silent_move(), leaf, root>(new_board, 0, var);
 
-            if constexpr (root) _bestmove<PIECE_INVALID>(from, to);
+            if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
         }
 
         template<State state, bool leaf, bool root>
-        static FORCEINLINE void _pawn_push(const Board& board, Bit from, Bit to, vars& var){
-            const Board new_board = move<PAWN, state.white_move, false>(board, from, to);
-            _any_move<state.new_ep_pawn(), leaf, root>(new_board, to, var);
+        static void _pawn_push(vars& var, const Board& board, _vals& val){
+            const Board new_board = move<PAWN, state.white_move, false>(board, val.from, val.to);
+            _any_move<state.new_ep_pawn(), leaf, root>(new_board, val.to, var);
 
-            if constexpr (root) _bestmove<PIECE_INVALID>(from, to);
+            if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
         }
 
         template<State state, Piece promotion_to, bool capture, bool leaf, bool root>
-        static FORCEINLINE void _promotion_move(const Board& board, Bit& from, Bit& to, vars& var){
-            const Board new_board = promotion_move<promotion_to, state.white_move, capture>(board, from, to);
+        static void _promotion_move(vars& var, const Board& board, _vals& val){
+            const Board new_board = promotion_move<promotion_to, state.white_move, capture>(board, val.from, val.to);
             _any_move<state.silent_move(), leaf, root>(new_board, 0, var);
 
-            if constexpr (root) _bestmove<promotion_to>(from, to);
+            if constexpr (root) _bestmove<promotion_to>(val.from, val.to);
         }
 
     public:
@@ -208,12 +240,14 @@ namespace ZeroLogic {
             if constexpr (leaf) count(moves | captures);
             Bit king = King<us>(board);
             Bitloop(moves) {
-                _kingmove<state, false, leaf, root>(board, king, 1ull << SquareOf(moves), var);
-                if (prune()) return;
+                var.priority3[var.num_moves3] = _kingmove<state, false, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {king, 1ull << SquareOf(moves), 0};
+                ++var.num_moves3;
             }
             Bitloop(captures) {
-                _kingmove<state, true, leaf, root>(board, king, 1ull << SquareOf(captures), var);
-                if (prune()) return;
+                var.priority2[var.num_moves2] = _kingmove<state, true, leaf, root>;
+                var.pr2_vals[var.num_moves2] = {king, 1ull << SquareOf(captures), 0};
+                ++var.num_moves2;
             }
         }
 
@@ -225,10 +259,15 @@ namespace ZeroLogic {
                 if (rep) increment();
             }
             if (lep) {
-                _ep_move<state, leaf, root>(board, lep, pawn_atk_left<us>(lep), ep_target, var);
-                if (prune()) return;
+                var.priority2[var.num_moves2] =  _ep_move<state, leaf, root>;
+                var.pr2_vals[var.num_moves2] = {lep, pawn_atk_left<us>(lep), ep_target};
+                ++var.num_moves2;
             }
-            if (rep) _ep_move<state, leaf, root>(board, rep, pawn_atk_right<us>(rep), ep_target, var);
+            if (rep) {
+                var.priority2[var.num_moves2] =  _ep_move<state, leaf, root>;
+                var.pr2_vals[var.num_moves2] = {rep, pawn_atk_right<us>(rep), ep_target};
+                ++var.num_moves2;
+            }
         }
 
         template<State state, bool root, bool leaf>
@@ -244,56 +283,75 @@ namespace ZeroLogic {
             constexpr bool us = state.white_move;
             Bitloop(pr){
                 Square sq = SquareOf(pr);
-                _silent_move<state, true, PAWN, leaf, root>(board, 1ull << (sq + pawn_shift[0][us]), 1ull << sq, var);
-                if (prune()) return;
+                var.priority2[var.num_moves2] =  _silent_move<state, true, PAWN, leaf, root>;
+                var.pr2_vals[var.num_moves2] = {1ull << (sq + pawn_shift[0][us]), 1ull << sq, 0};
+                ++var.num_moves2;
             }
             Bitloop(pl){
                 Square sq = SquareOf(pl);
-                _silent_move<state, true, PAWN, leaf, root>(board, 1ull << (sq + pawn_shift[1][us]), 1ull << sq, var);
-                if (prune()) return;
+                var.priority2[var.num_moves2] =  _silent_move<state, true, PAWN, leaf, root>;
+                var.pr2_vals[var.num_moves2] = {1ull << (sq + pawn_shift[1][us]), 1ull << sq, 0};
+                ++var.num_moves2;
             }
             Bitloop(pr_promo){
                 Square sq = SquareOf(pr_promo); Bit from = 1ull << (sq + pawn_shift[0][us]), to = 1ull << sq;
-                _promotion_move<state, QUEEN, true, leaf, root>(board, from, to, var);
-                if (prune()) return;
-                _promotion_move<state, ROOK, true, leaf, root>(board, from, to, var);
-                if (prune()) return;
-                _promotion_move<state, BISHOP, true, leaf, root>(board, from, to, var);
-                if (prune()) return;
-                _promotion_move<state, KNIGHT, true, leaf, root>(board, from, to, var);
-                if (prune()) return;
+                var.priority1[var.num_moves1] = _promotion_move<state, QUEEN, true, leaf, root>;
+                var.pr1_vals[var.num_moves1] = {from, to, 0};
+                ++var.num_moves1;
+
+                var.priority3[var.num_moves3] =  _promotion_move<state, ROOK, true, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {from, to, 0};
+                ++var.num_moves3;
+                var.priority3[var.num_moves3] =  _promotion_move<state, BISHOP, true, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {from, to, 0};
+                ++var.num_moves3;
+                var.priority3[var.num_moves3] =  _promotion_move<state, KNIGHT, true, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {from, to, 0};
+                ++var.num_moves3;
             }
             Bitloop(pl_promo){
                 Square sq = SquareOf(pl_promo); Bit from = 1ull << (sq + pawn_shift[1][us]), to = 1ull << sq;
-                _promotion_move<state, QUEEN, true, leaf, root>(board, from, to, var);
-                if (prune()) return;
-                _promotion_move<state, ROOK, true, leaf, root>(board, from, to, var);
-                if (prune()) return;
-                _promotion_move<state, BISHOP, true, leaf, root>(board, from, to, var);
-                if (prune()) return;
-                _promotion_move<state, KNIGHT, true, leaf, root>(board, from, to, var);
-                if (prune()) return;
+                var.priority1[var.num_moves1] = _promotion_move<state, QUEEN, true, leaf, root>;
+                var.pr1_vals[var.num_moves1] = {from, to, 0};
+                ++var.num_moves1;
+
+                var.priority3[var.num_moves3] =  _promotion_move<state, ROOK, true, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {from, to, 0};
+                ++var.num_moves3;
+                var.priority3[var.num_moves3] =  _promotion_move<state, BISHOP, true, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {from, to, 0};
+                ++var.num_moves3;
+                var.priority3[var.num_moves3] =  _promotion_move<state, KNIGHT, true, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {from, to, 0};
+                ++var.num_moves3;
             }
             Bitloop(pf){
                 Square sq = SquareOf(pf);
-                _silent_move<state, false, PAWN, leaf, root>(board, 1ull << (sq + sign<us>(-8)), 1ull << sq, var);
-                if (prune()) return;
+                var.priority3[var.num_moves3] =  _silent_move<state, false, PAWN, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {1ull << (sq + sign<us>(-8)), 1ull << sq, 0};
+                ++var.num_moves3;
             }
             Bitloop(pf_promo){
                 Square sq = SquareOf(pf_promo); Bit from = 1ull << (sq + sign<us>(-8)), to = 1ull << sq;
-                _promotion_move<state, QUEEN, false, leaf, root>(board, from, to, var);
-                if (prune()) return;
-                _promotion_move<state, ROOK, false, leaf, root>(board, from, to, var);
-                if (prune()) return;
-                _promotion_move<state, BISHOP, false, leaf, root>(board, from, to, var);
-                if (prune()) return;
-                _promotion_move<state, KNIGHT, false, leaf, root>(board, from, to, var);
-                if (prune()) return;
+                var.priority1[var.num_moves1] = _promotion_move<state, QUEEN, false, leaf, root>;
+                var.pr1_vals[var.num_moves1] = {from, to, 0};
+                ++var.num_moves1;
+
+                var.priority3[var.num_moves3] =  _promotion_move<state, ROOK, false, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {from, to, 0};
+                ++var.num_moves3;
+                var.priority3[var.num_moves3] =  _promotion_move<state, BISHOP, false, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {from, to, 0};
+                ++var.num_moves3;
+                var.priority3[var.num_moves3] =  _promotion_move<state, KNIGHT, false, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {from, to, 0};
+                ++var.num_moves3;
             }
             Bitloop(pp){
                 Square sq = SquareOf(pp);
-                _pawn_push<state, leaf, root>(board, 1ull << (sq + sign<us>(-16)), 1ull << sq, var);
-                if (prune()) return;
+                var.priority3[var.num_moves3] =  _pawn_push<state, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {1ull << (sq + sign<us>(-16)), 1ull << sq, 0};
+                ++var.num_moves3;
             }
         }
 
@@ -302,12 +360,14 @@ namespace ZeroLogic {
             if constexpr (leaf)
                 count(moves | captures);
             Bitloop(moves) {
-                _silent_move<state, false, piece, leaf, root>(board, 1ull << sq, 1ull << SquareOf(moves), var);
-                if (prune()) return;
+                var.priority3[var.num_moves3] = _silent_move<state, false, piece, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {1ull << sq, 1ull << SquareOf(moves), 0};
+                ++var.num_moves3;
             }
             Bitloop(captures) {
-                _silent_move<state, true, piece, leaf, root>(board, 1ull << sq, 1ull << SquareOf(captures), var);
-                if (prune()) return;
+                var.priority2[var.num_moves2] = _silent_move<state, true, piece, leaf, root>;
+                var.pr2_vals[var.num_moves2] = {1ull << sq, 1ull << SquareOf(captures), 0};
+                ++var.num_moves2;
             }
         }
         template<State state, bool root, bool leaf>
@@ -315,12 +375,14 @@ namespace ZeroLogic {
             if constexpr (leaf)
                 count(moves | captures);
             Bitloop(moves) {
-                _rookmove<state, false, leaf, root>(board, 1ull << sq, 1ull << SquareOf(moves), var);
-                if (prune()) return;
+                var.priority3[var.num_moves3] = _rookmove<state, false, leaf, root>;
+                var.pr3_vals[var.num_moves3] = {1ull << sq, 1ull << SquareOf(moves), 0};
+                ++var.num_moves3;
             }
             Bitloop(captures) {
-                _rookmove<state, true, leaf, root>(board, 1ull << sq, 1ull << SquareOf(captures), var);
-                if (prune()) return;
+                var.priority2[var.num_moves2] = _rookmove<state, true, leaf, root>;
+                var.pr2_vals[var.num_moves2] = {1ull << sq, 1ull << SquareOf(captures), 0};
+                ++var.num_moves2;
             }
         }
 
@@ -328,13 +390,14 @@ namespace ZeroLogic {
         static FORCEINLINE void castlemove(const Board& board, vars& var){
             if constexpr (leaf) increment();
             if constexpr (left) {
-                if constexpr (state.white_move) _castlemove<state, WHITE_OOO, leaf, root>(board, var);
-                else                            _castlemove<state, BLACK_OOO, leaf, root>(board, var);
+                if constexpr (state.white_move) var.priority3[var.num_moves3] = _castlemove<state, WHITE_OOO, leaf, root>;
+                else                            var.priority3[var.num_moves3] = _castlemove<state, BLACK_OOO, leaf, root>;
             }
             else {
-                if constexpr (state.white_move) _castlemove<state, WHITE_OO, leaf, root>(board, var);
-                else                            _castlemove<state, BLACK_OO, leaf, root>(board, var);
+                if constexpr (state.white_move) var.priority3[var.num_moves3] = _castlemove<state, WHITE_OO, leaf, root>;
+                else                            var.priority3[var.num_moves3] = _castlemove<state, BLACK_OO, leaf, root>;
             }
+            ++var.num_moves3;
         }
     };
 }

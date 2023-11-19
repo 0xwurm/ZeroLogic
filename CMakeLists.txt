@@ -9,10 +9,10 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_EXE_LINKER_FLAGS "-static")
 add_compile_options("-mbmi2")
 add_compile_options("-mbmi")
+add_compile_options("-Q")
 
 add_executable(ZeroLogic
         src/main.cpp
-        src/uci.cpp
         src/tables.h
         src/eval.h
         src/gamestate.h
@@ -20,5 +20,5 @@ add_executable(ZeroLogic
         src/variables.h
         src/movegenerator.h
         src/misc.h
-        src/perft_callback.h
-        src/search_callback.h)
+        src/search_callback.h
+        src/perft_callback.h)
