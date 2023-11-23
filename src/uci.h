@@ -54,6 +54,10 @@ namespace ZeroLogic::UCI {
                 is >> token;
                 Perft::go<state>(board, std::stoi(token), ep_target);
             }
+            else if (token == "single"){
+                is >> token;
+                Search::go_single<state>(board, std::stoi(token), ep_target);
+            }
 
     }
 

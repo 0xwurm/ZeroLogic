@@ -36,6 +36,21 @@ namespace ZeroLogic {
     inline eval operator -(eval& val){
         return eval(s16(-1) * s16(val));
     }
+    inline eval operator -(eval val1, eval val2){
+        int res = int(val1) - int(val2);
+        if      (res > ABSOLUTE_MAX)    return ABSOLUTE_MAX;
+        else if (res < ABSOLUTE_MIN)    return ABSOLUTE_MIN;
+        else                            return eval(res);
+    }
+    inline eval operator +(eval val1, eval val2){
+        int res = int(val1) + int(val2);
+        if      (res > ABSOLUTE_MAX)    return ABSOLUTE_MAX;
+        else if (res < ABSOLUTE_MIN)    return ABSOLUTE_MIN;
+        else                            return eval(res);
+    }
+    inline eval& operator *=(eval& val1, int val2){
+        return val1 = eval(val1 * val2);
+    }
 
 	enum BoardConstants : const map {
 		A_FILE = 0x8080808080808080,    FIRST_RANK = 0xff,

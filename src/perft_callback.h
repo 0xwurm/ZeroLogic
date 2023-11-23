@@ -4,14 +4,14 @@ namespace ZeroLogic {
     using namespace Boardstate;
     using namespace Movegen;
 
-    static u64 partial_nodecount;
-    static u64 overall_nodecount;
-    static std::chrono::steady_clock::time_point start_time;
-    static bool depth1;
-
     class Perft {
 
     public:
+
+        static inline u64 partial_nodecount;
+        static inline u64 overall_nodecount;
+        static inline std::chrono::steady_clock::time_point start_time;
+        static inline bool depth1;
 
         struct vars{
             u8 depth;

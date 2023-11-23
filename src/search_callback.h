@@ -13,7 +13,7 @@ namespace ZeroLogic {
         static inline bool better_root_move;
         static inline bool cutoff;
         static inline u8 full_depth;
-
+        static inline std::chrono::steady_clock::time_point start_time;
 
         struct _vals{
             Bit from;
@@ -85,15 +85,6 @@ namespace ZeroLogic {
 
     private:
 
-        static void init(u8 depth){
-            nodecount = 0;
-            start_time = std::chrono::steady_clock::now();
-            bestmove = "invalid move";
-            better_root_move = false;
-            cutoff = false;
-            full_depth = depth;
-        }
-
         static FORCEINLINE void count(const map moves){
             nodecount += BitCount(moves);
         }
@@ -104,21 +95,6 @@ namespace ZeroLogic {
             ++nodecount;
         }
 
-        static void display_info(u8 depth, eval evaluation) {
-            auto duration = std::chrono::steady_clock::now() - start_time;
-            auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-
-            std::stringstream info;
-            info << "info"
-                 << " depth "   << int(depth)
-                 << " nodes "   << nodecount
-                 << " time "    << duration_ms
-                 << Misc::uci_eval(eval(-evaluation));
-
-            std::cout << info.str()                << std::endl << std::flush;
-            std::cout << "bestmove " << bestmove   << std::endl << std::flush;
-        }
-
         template <Piece promotion_to>
         static FORCEINLINE void _bestmove(Bit& from, Bit& to){
             if (better_root_move) {
@@ -126,6 +102,9 @@ namespace ZeroLogic {
                 better_root_move = false;
             }
         }
+
+
+
 
         template<State new_state, bool leaf, bool root>
         static FORCEINLINE void _any_move(const Board& new_board, Bit ep_target, vars& var, Bit recapture){
@@ -229,21 +208,72 @@ namespace ZeroLogic {
             if constexpr (root) _bestmove<promotion_to>(val.from, val.to);
         }
 
-    public:
 
-        template<State state>
-        static void go(const Board& board, u8 depth, Bit ep_target){
-            init(depth);
-            vars var = {depth, ABSOLUTE_MIN, ABSOLUTE_MAX};
-            enumerate<state, true, Search>(board, var, ep_target);
-            display_info(depth, var.alpha);
+        static void init(u8 depth){
+            bestmove = "invalid move";
+            better_root_move = false;
+            cutoff = false;
+            full_depth = depth;
         }
 
+        static void display_info(u8 depth, eval evaluation) {
+            auto duration = std::chrono::steady_clock::now() - start_time;
+            auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+
+            std::stringstream info;
+            info << "info"
+                 << " depth "   << int(depth)
+                 << " nodes "   << nodecount
+                 << " time "    << duration_ms
+                 << " pv "      << bestmove
+                 << Misc::uci_eval(evaluation);
+
+            std::cout << info.str() << std::endl << std::flush;
+        }
+
+        template<State state>
+        static void start_iteration(const Board& board, vars& var, Bit ep_target){
+            init(var.depth);
+            enumerate<state, true, Search>(board, var, ep_target);
+        }
+
+        constexpr static const eval bounds[4] = {eval(10), eval(100), eval(300), ABSOLUTE_MAX};
+
+        template<State state>
+        static void start_id(const Board& board, u8 depth, Bit ep_target){
+            eval last_eval{}, lower_bound{10}, upper_bound{10};
+            u8 curr_depth = 1;
+            nodecount = 0;
+            start_time = std::chrono::steady_clock::now();
+
+            int fail_high_count = 0;
+            int fail_low_count = 0;
+            while (curr_depth != depth + 1){
+                // std::cout << "iteration\n";
+                vars curr_var = {curr_depth, last_eval - lower_bound, last_eval + upper_bound, 0};
+                start_iteration<state>(board, curr_var, ep_target);
+                curr_var.alpha *= -1;
+
+
+                if      (curr_var.alpha >= (last_eval + upper_bound)) {fail_high_count++; upper_bound = bounds[fail_high_count];}
+                else if (curr_var.alpha <= (last_eval - lower_bound)) {fail_low_count++; lower_bound = bounds[fail_low_count];}
+                else{
+                    display_info(curr_depth, curr_var.alpha);
+                    last_eval = curr_var.alpha;
+                    lower_bound = eval(10);
+                    upper_bound = eval(10);
+                    curr_depth++;
+                    fail_high_count = 0;
+                    fail_low_count = 0;
+                }
+            }
+        }
+
+    public:
+
         static FORCEINLINE void check_priority(void (*_func)(vars&, const Board&, _vals&), _vals _val, vars& var){
-            if (var.cap_square & _val.to)
-                var.priority1.put_in(_func, _val);
-            else
-                var.priority2.put_in(_func, _val);
+            if (var.cap_square & _val.to)   var.priority1.put_in(_func, _val);
+            else                            var.priority2.put_in(_func, _val);
         }
 
         template<State state, bool capture, bool leaf, bool root>
@@ -273,10 +303,8 @@ namespace ZeroLogic {
                 if (lep) increment();
                 if (rep) increment();
             }
-            if (lep)
-                var.priority2.put_in(_ep_move<state, leaf, root>, {lep, pawn_atk_left<us>(lep), ep_target});
-            if (rep)
-                var.priority2.put_in(_ep_move<state, leaf, root>, {rep, pawn_atk_right<us>(rep), ep_target});
+            if (lep) var.priority2.put_in(_ep_move<state, leaf, root>, {lep, pawn_atk_left<us>(lep), ep_target});
+            if (rep) var.priority2.put_in(_ep_move<state, leaf, root>, {rep, pawn_atk_right<us>(rep), ep_target});
         }
 
         template<State state, bool root, bool leaf>
@@ -351,6 +379,21 @@ namespace ZeroLogic {
                 if constexpr (state.white_move) var.priority3.put_in(_castlemove<state, WHITE_OO, leaf, root>, {});
                 else                            var.priority3.put_in(_castlemove<state, BLACK_OO, leaf, root>, {});
             }
+        }
+
+        template<State state>
+        static void go(const Board& board, u8 depth, Bit ep_target){
+            start_id<state>(board, depth, ep_target);
+            std::cout << "bestmove " << bestmove << std::endl;
+        }
+        template<State state>
+        static void go_single(const Board& board, u8 depth, Bit ep_target){
+            nodecount = 0;
+            start_time = std::chrono::steady_clock::now();
+            vars var = {depth, ABSOLUTE_MIN, ABSOLUTE_MAX, 0};
+            start_iteration<state>(board, var, ep_target);
+            display_info(depth, -var.alpha);
+            std::cout << "bestmove " << bestmove << std::endl;
         }
     };
 }

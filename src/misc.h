@@ -1,6 +1,7 @@
 #pragma once
 #include "variables.h"
 #include "gamestate.h"
+#include <sstream>
 
 namespace ZeroLogic::Misc{
 
