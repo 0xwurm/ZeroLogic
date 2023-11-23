@@ -22,6 +22,9 @@ go perft {depth}
 ```
 go depth {depth}
 ```
+```
+go single {depth} (not released yet)
+```
 
 At the moment the only usable feature is movegeneration. **Work in progress.**
 
