@@ -37,18 +37,22 @@ namespace ZeroLogic::UCI {
             state = new Boardstate::State(Boardstate::change_state(move));
             ep_target = Boardstate::ep_state(move);
         }
+        board = new Boardstate::Board(board->BPawn, board->BKnight, board->BBishop, board->BRook, board->BQueen, board->BKing,
+                                      board->WPawn, board->WKnight, board->WBishop, board->WRook, board->WQueen, board->WKing,
+                                      Boardstate::hash_position(*board, *state, ep_target));
     }
 
     template <Boardstate::State state>
     static void go(std::istringstream& is, const Boardstate::Board& board, Bit ep_target) {
 
         std::string token;
+        TT::init();
 
         while (is >> token)
 
             if (token == "depth") {
                 is >> token;
-                Search::go<state>(board, std::stoi(token), ep_target);
+                // Search::go<state>(board, std::stoi(token), ep_target);
             }
             else if (token == "perft") {
                 is >> token;
@@ -56,7 +60,7 @@ namespace ZeroLogic::UCI {
             }
             else if (token == "single"){
                 is >> token;
-                Search::go_single<state>(board, std::stoi(token), ep_target);
+                // Search::go_single<state>(board, std::stoi(token), ep_target);
             }
 
     }
@@ -64,6 +68,7 @@ namespace ZeroLogic::UCI {
     static void loop(int argc, char* argv[]) {
 
         Movegen::init_lookup();
+        TT::init_keys();
         Boardstate::State* state;
         Boardstate::Board* board;
         Boardstate::State start_state = Boardstate::State::normal();
@@ -95,6 +100,12 @@ namespace ZeroLogic::UCI {
             }
             else if (token == "isready") {
                 std::cout << "readyok\n";
+            }
+            else if (token == "d"){
+                std::cout << "Fen: " << b_to_fen(*board, *state, ep_target) << std::endl;
+                char hex_hash[100];
+                std::sprintf(hex_hash, "%llX", hash_position(*board, *state, ep_target));
+                std::cout << "Key: " << hex_hash << std::endl;
             }
             else if (token == "go") {
                 // template instantiation hell

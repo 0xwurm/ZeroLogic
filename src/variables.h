@@ -7,8 +7,9 @@
 namespace ZeroLogic {
     typedef unsigned char u8;
     typedef signed short s16;
-
+    typedef unsigned int u32;
 	typedef unsigned long long u64;
+
 	typedef u64 map;
     typedef u64 Bit;
     typedef unsigned char Square;

@@ -20,4 +20,6 @@ add_executable(ZeroLogic
         src/movegenerator.h
         src/misc.h
         src/search_callback.h
-        src/perft_callback.h)
+        src/perft_callback.h
+        src/search_helpers.h
+        src/transposition.h)

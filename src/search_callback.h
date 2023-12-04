@@ -1,4 +1,5 @@
 #pragma once
+#include "search_helpers.h"
 
 namespace ZeroLogic {
     using namespace Boardstate;
@@ -249,11 +250,13 @@ namespace ZeroLogic {
             int fail_high_count = 0;
             int fail_low_count = 0;
             while (curr_depth != depth + 1){
-                // std::cout << "iteration\n";
-                vars curr_var = {curr_depth, last_eval - lower_bound, last_eval + upper_bound, 0};
+                vars curr_var;
+                if (curr_depth == 1)    curr_var = {curr_depth, ABSOLUTE_MIN, ABSOLUTE_MAX, 0};
+                else                    curr_var = {curr_depth, last_eval - lower_bound, last_eval + upper_bound, 0};
+
+
                 start_iteration<state>(board, curr_var, ep_target);
                 curr_var.alpha *= -1;
-
 
                 if      (curr_var.alpha >= (last_eval + upper_bound)) {fail_high_count++; upper_bound = bounds[fail_high_count];}
                 else if (curr_var.alpha <= (last_eval - lower_bound)) {fail_low_count++; lower_bound = bounds[fail_low_count];}
@@ -270,6 +273,16 @@ namespace ZeroLogic {
         }
 
     public:
+
+        template <bool white>
+        static FORCEINLINE void sort(const Board& board, void (*_func)(vars&, const Board&, _vals&), _vals _val, vars& var){
+            if (is_check<white>(board)){
+
+            }
+            else{
+
+            }
+        }
 
         static FORCEINLINE void check_priority(void (*_func)(vars&, const Board&, _vals&), _vals _val, vars& var){
             if (var.cap_square & _val.to)   var.priority1.put_in(_func, _val);
