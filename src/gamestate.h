@@ -94,6 +94,46 @@ namespace ZeroLogic::Boardstate {
 
     };
 
+    struct reduced_Board{
+        map BPawn, BKnight, BBishop, BRook, BQueen, BKing;
+        map WPawn, WKnight, WBishop, WRook, WQueen, WKing;
+        map ep;
+
+        constexpr reduced_Board(
+                map bp, map bn, map bb, map br, map bq, map bk,
+                map wp, map wn, map wb, map wr, map wq, map wk,
+                map ep
+                ) :
+                BPawn(bp), BKnight(bn), BBishop(bb), BRook(br), BQueen(bq), BKing(bk),
+                WPawn(wp), WKnight(wn), WBishop(wb), WRook(wr), WQueen(wq), WKing(wk),
+                ep(ep)
+        {}
+        constexpr reduced_Board()
+        :
+                BPawn(0), BKnight(0), BBishop(0), BRook(0), BQueen(0), BKing(0),
+                WPawn(0), WKnight(0), WBishop(0), WRook(0), WQueen(0), WKing(0),
+                ep(0)
+        {}
+
+    };
+
+    inline bool operator ==(reduced_Board& b1, reduced_Board& b2){
+        if (b1.WPawn    != b2.WPawn)     return false;
+        if (b1.BPawn    != b2.BPawn)     return false;
+        if (b1.WKnight  != b2.WKnight)   return false;
+        if (b1.BKnight  != b2.BKnight)   return false;
+        if (b1.WBishop  != b2.WBishop)   return false;
+        if (b1.BBishop  != b2.BBishop)   return false;
+        if (b1.WRook    != b2.WRook)     return false;
+        if (b1.BRook    != b2.BRook)     return false;
+        if (b1.WQueen   != b2.WQueen)    return false;
+        if (b1.BQueen   != b2.BQueen)    return false;
+        if (b1.WKing    != b2.WKing)     return false;
+        if (b1.BKing    != b2.BKing)     return false;
+        if (b1.ep       != b2.ep)        return false;
+        return true;
+    }
+
 	struct Board{
         const map BPawn, BKnight, BBishop, BRook, BQueen, BKing;
         const map WPawn, WKnight, WBishop, WRook, WQueen, WKing;
@@ -111,6 +151,10 @@ namespace ZeroLogic::Boardstate {
                 Occ(Black | White),
                 hash(zh)
         {}
+
+        FORCEINLINE reduced_Board reduce(map ep) const{
+            return {BPawn, BKnight, BBishop, BRook, BQueen, BKing, WPawn, WKnight, WBishop, WRook, WQueen, WKing, ep};
+        }
 
     };
 
@@ -174,111 +218,114 @@ namespace ZeroLogic::Boardstate {
         if (to & Knights<!white_move>(board))   return TT::get_key<KNIGHT, !white_move>(SquareOf(to));
         if (to & Rooks<!white_move>(board))     return TT::get_key<ROOK, !white_move>(SquareOf(to));
         if (to & Queens<!white_move>(board))    return TT::get_key<QUEEN, !white_move>(SquareOf(to));
-        return board.hash;
+        return 0;
     }
 
     template <bool white_move>
     FORCEINLINE static Board ep_move(const Board& old_board, map mov, Bit ep_target){
         const map bp = old_board.BPawn, bn = old_board.BKnight, bb = old_board.BBishop, br = old_board.BRook, bq = old_board.BQueen, bk = old_board.BKing;
         const map wp = old_board.WPawn, wn = old_board.WKnight, wb = old_board.WBishop, wr = old_board.WRook, wq = old_board.WQueen, wk = old_board.WKing;
-        u64 new_hash = old_board.hash ^ TT::get_key<PAWN, white_move>(SquareOf(mov)) ^ TT::get_key<PAWN, white_move>(SquareOf(mov & (mov - 1))) ^ TT::get_key<PAWN, !white_move>(SquareOf(ep_target)) ^ TT::w_key;
+        u64 new_hash = old_board.hash ^ TT::keys[TT::ep0 + (SquareOf(ep_target) % 8)] ^ TT::get_key<PAWN, white_move>(SquareOf(mov)) ^ TT::get_key<PAWN, white_move>(SquareOf(mov & (mov - 1))) ^ TT::get_key<PAWN, !white_move>(SquareOf(ep_target)) ^ TT::w_key;
 
         if constexpr (white_move)   return {bp ^ ep_target, bn, bb, br, bq, bk, wp ^ mov, wn, wb, wr, wq, wk, new_hash};
         else                        return {bp ^ mov, bn, bb, br, bq, bk, wp ^ ep_target, wn, wb, wr, wq, wk, new_hash};
     }
 
-    template <Piece piece, bool white_move, bool taking>
-    FORCEINLINE static Board move(const Board& old_board, const Bit& from, const Bit& to){
+    template <Piece piece, bool white_move, bool taking, bool change_hash>
+    FORCEINLINE static Board move(const Board& old_board, const Bit& from, const Bit& to, const map hash_change){
         const map bp = old_board.BPawn, bn = old_board.BKnight, bb = old_board.BBishop, br = old_board.BRook, bq = old_board.BQueen, bk = old_board.BKing;
         const map wp = old_board.WPawn, wn = old_board.WKnight, wb = old_board.WBishop, wr = old_board.WRook, wq = old_board.WQueen, wk = old_board.WKing;
-        const u64 hash = old_board.hash ^ TT::w_key;
+        u64 hash = old_board.hash ^ TT::w_key;
+        if constexpr (change_hash) hash ^= hash_change;
 
         const map mov = from | to;
         if constexpr (taking) {
             const map rem = ~to;
-            u64 new_hash = hash ^ TT::get_key<piece, white_move>(SquareOf(from)) ^ TT::get_key<piece, white_move>(SquareOf(to)) ^ captured_hash<white_move>(old_board, to);
+            hash ^= TT::get_key<piece, white_move>(SquareOf(from)) ^ TT::get_key<piece, white_move>(SquareOf(to)) ^ captured_hash<white_move>(old_board, to);
             if constexpr (white_move) {
-                if constexpr (PAWN == piece)    return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp ^ mov, wn, wb, wr, wq, wk, new_hash};
-                if constexpr (KNIGHT == piece)  return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp, wn ^ mov, wb, wr, wq, wk, new_hash};
-                if constexpr (BISHOP == piece)  return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp, wn, wb ^ mov, wr, wq, wk, new_hash};
-                if constexpr (ROOK == piece)    return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp, wn, wb, wr ^ mov, wq, wk, new_hash};
-                if constexpr (QUEEN == piece)   return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp, wn, wb, wr, wq ^ mov, wk, new_hash};
-                if constexpr (KING == piece)    return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp, wn, wb, wr, wq, wk ^ mov, new_hash};
+                if constexpr (PAWN == piece)    return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp ^ mov, wn, wb, wr, wq, wk, hash};
+                if constexpr (KNIGHT == piece)  return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp, wn ^ mov, wb, wr, wq, wk, hash};
+                if constexpr (BISHOP == piece)  return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp, wn, wb ^ mov, wr, wq, wk, hash};
+                if constexpr (ROOK == piece)    return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp, wn, wb, wr ^ mov, wq, wk, hash};
+                if constexpr (QUEEN == piece)   return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp, wn, wb, wr, wq ^ mov, wk, hash};
+                if constexpr (KING == piece)    return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp, wn, wb, wr, wq, wk ^ mov, hash};
             }
             else {
-                if constexpr (PAWN == piece)    return {bp ^ mov, bn, bb, br, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, new_hash};
-                if constexpr (KNIGHT == piece)  return {bp, bn ^ mov, bb, br, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, new_hash};
-                if constexpr (BISHOP == piece)  return {bp, bn, bb ^ mov, br, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, new_hash};
-                if constexpr (ROOK == piece)    return {bp, bn, bb, br ^ mov, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, new_hash};
-                if constexpr (QUEEN == piece)   return {bp, bn, bb, br, bq ^ mov, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, new_hash};
-                if constexpr (KING == piece)    return {bp, bn, bb, br, bq, bk ^ mov, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, new_hash};
+                if constexpr (PAWN == piece)    return {bp ^ mov, bn, bb, br, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, hash};
+                if constexpr (KNIGHT == piece)  return {bp, bn ^ mov, bb, br, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, hash};
+                if constexpr (BISHOP == piece)  return {bp, bn, bb ^ mov, br, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, hash};
+                if constexpr (ROOK == piece)    return {bp, bn, bb, br ^ mov, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, hash};
+                if constexpr (QUEEN == piece)   return {bp, bn, bb, br, bq ^ mov, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, hash};
+                if constexpr (KING == piece)    return {bp, bn, bb, br, bq, bk ^ mov, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, hash};
             }
         }
         else {
-            u64 new_hash = hash ^ TT::get_key<piece, white_move>(SquareOf(from)) ^ TT::get_key<piece, white_move>(SquareOf(to));
+            hash ^= TT::get_key<piece, white_move>(SquareOf(from)) ^ TT::get_key<piece, white_move>(SquareOf(to));
             if constexpr (white_move) {
-                if constexpr (PAWN == piece)    return {bp, bn, bb, br, bq, bk, wp ^ mov, wn, wb, wr, wq, wk, new_hash};
-                if constexpr (KNIGHT == piece)  return {bp, bn, bb, br, bq, bk, wp, wn ^ mov, wb, wr, wq, wk, new_hash};
-                if constexpr (BISHOP == piece)  return {bp, bn, bb, br, bq, bk, wp, wn, wb ^ mov, wr, wq, wk, new_hash};
-                if constexpr (ROOK == piece)    return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr ^ mov, wq, wk, new_hash};
-                if constexpr (QUEEN == piece)   return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr, wq ^ mov, wk, new_hash};
-                if constexpr (KING == piece)    return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr, wq, wk ^ mov, new_hash};
+                if constexpr (PAWN == piece)    return {bp, bn, bb, br, bq, bk, wp ^ mov, wn, wb, wr, wq, wk, hash};
+                if constexpr (KNIGHT == piece)  return {bp, bn, bb, br, bq, bk, wp, wn ^ mov, wb, wr, wq, wk, hash};
+                if constexpr (BISHOP == piece)  return {bp, bn, bb, br, bq, bk, wp, wn, wb ^ mov, wr, wq, wk, hash};
+                if constexpr (ROOK == piece)    return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr ^ mov, wq, wk, hash};
+                if constexpr (QUEEN == piece)   return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr, wq ^ mov, wk, hash};
+                if constexpr (KING == piece)    return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr, wq, wk ^ mov, hash};
             }
             else {
-                if constexpr (PAWN == piece)    return {bp ^ mov, bn, bb, br, bq, bk, wp, wn, wb, wr, wq, wk, new_hash};
-                if constexpr (KNIGHT == piece)  return {bp, bn ^ mov, bb, br, bq, bk, wp, wn, wb, wr, wq, wk, new_hash};
-                if constexpr (BISHOP == piece)  return {bp, bn, bb ^ mov, br, bq, bk, wp, wn, wb, wr, wq, wk, new_hash};
-                if constexpr (ROOK == piece)    return {bp, bn, bb, br ^ mov, bq, bk, wp, wn, wb, wr, wq, wk, new_hash};
-                if constexpr (QUEEN == piece)   return {bp, bn, bb, br, bq ^ mov, bk, wp, wn, wb, wr, wq, wk, new_hash};
-                if constexpr (KING == piece)    return {bp, bn, bb, br, bq, bk ^ mov, wp, wn, wb, wr, wq, wk, new_hash};
+                if constexpr (PAWN == piece)    return {bp ^ mov, bn, bb, br, bq, bk, wp, wn, wb, wr, wq, wk, hash};
+                if constexpr (KNIGHT == piece)  return {bp, bn ^ mov, bb, br, bq, bk, wp, wn, wb, wr, wq, wk, hash};
+                if constexpr (BISHOP == piece)  return {bp, bn, bb ^ mov, br, bq, bk, wp, wn, wb, wr, wq, wk, hash};
+                if constexpr (ROOK == piece)    return {bp, bn, bb, br ^ mov, bq, bk, wp, wn, wb, wr, wq, wk, hash};
+                if constexpr (QUEEN == piece)   return {bp, bn, bb, br, bq ^ mov, bk, wp, wn, wb, wr, wq, wk, hash};
+                if constexpr (KING == piece)    return {bp, bn, bb, br, bq, bk ^ mov, wp, wn, wb, wr, wq, wk, hash};
             }
         }
     }
 
-    template <Piece promotion_to, bool white_move, bool taking>
-    FORCEINLINE static Board promotion_move(const Board& old_board, const Bit& from, const Bit& to){
+    template <Piece promotion_to, bool white_move, bool taking, bool change_hash>
+    FORCEINLINE static Board promotion_move(const Board& old_board, const Bit& from, const Bit& to, const map hash_change){
         const map bp = old_board.BPawn, bn = old_board.BKnight, bb = old_board.BBishop, br = old_board.BRook, bq = old_board.BQueen, bk = old_board.BKing;
         const map wp = old_board.WPawn, wn = old_board.WKnight, wb = old_board.WBishop, wr = old_board.WRook, wq = old_board.WQueen, wk = old_board.WKing;
-        const u64 hash = old_board.hash ^ TT::w_key;
+        u64 hash = old_board.hash ^ TT::w_key;
+        if constexpr (change_hash) hash ^= hash_change;
 
         if constexpr (taking){
             const map rem = ~to;
-            u64 new_hash = captured_hash<white_move>(old_board, to) ^ TT::get_key<PAWN, white_move>(SquareOf(from)) ^ TT::get_key<promotion_to, white_move>(SquareOf(to));
+            hash ^= captured_hash<white_move>(old_board, to) ^ TT::get_key<PAWN, white_move>(SquareOf(from)) ^ TT::get_key<promotion_to, white_move>(SquareOf(to));
             if constexpr (white_move) {
-                if      constexpr (promotion_to == QUEEN)   return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp ^ from, wn, wb, wr, wq ^ to, wk, new_hash};
-                else if constexpr (promotion_to == ROOK)    return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp ^ from, wn, wb, wr ^ to, wq, wk, new_hash};
-                else if constexpr (promotion_to == BISHOP)  return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp ^ from, wn, wb ^ to, wr, wq, wk, new_hash};
-                else if constexpr (promotion_to == KNIGHT)  return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp ^ from, wn ^ to, wb, wr, wq, wk, new_hash};
+                if      constexpr (promotion_to == QUEEN)   return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp ^ from, wn, wb, wr, wq ^ to, wk, hash};
+                else if constexpr (promotion_to == ROOK)    return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp ^ from, wn, wb, wr ^ to, wq, wk, hash};
+                else if constexpr (promotion_to == BISHOP)  return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp ^ from, wn, wb ^ to, wr, wq, wk, hash};
+                else if constexpr (promotion_to == KNIGHT)  return {bp & rem, bn & rem, bb & rem, br & rem, bq & rem, bk, wp ^ from, wn ^ to, wb, wr, wq, wk, hash};
             }
             else{
-                if      constexpr (promotion_to == QUEEN)   return {bp ^ from, bn, bb, br, bq ^ to, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, new_hash};
-                else if constexpr (promotion_to == ROOK)    return {bp ^ from, bn, bb, br ^ to, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, new_hash};
-                else if constexpr (promotion_to == BISHOP)  return {bp ^ from, bn, bb ^ to, br, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, new_hash};
-                else if constexpr (promotion_to == KNIGHT)  return {bp ^ from, bn ^ to, bb, br, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, new_hash};
+                if      constexpr (promotion_to == QUEEN)   return {bp ^ from, bn, bb, br, bq ^ to, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, hash};
+                else if constexpr (promotion_to == ROOK)    return {bp ^ from, bn, bb, br ^ to, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, hash};
+                else if constexpr (promotion_to == BISHOP)  return {bp ^ from, bn, bb ^ to, br, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, hash};
+                else if constexpr (promotion_to == KNIGHT)  return {bp ^ from, bn ^ to, bb, br, bq, bk, wp & rem, wn & rem, wb & rem, wr & rem, wq & rem, wk, hash};
             }
         }
         else{
-            u64 new_hash = hash ^ TT::get_key<PAWN, white_move>(SquareOf(from)) ^ TT::get_key<promotion_to, white_move>(SquareOf(to));
+            hash ^= TT::get_key<PAWN, white_move>(SquareOf(from)) ^ TT::get_key<promotion_to, white_move>(SquareOf(to));
             if constexpr (white_move){
-                if      constexpr (promotion_to == QUEEN)   return {bp, bn, bb, br, bq, bk, wp ^ from, wn, wb, wr, wq ^ to, wk, new_hash};
-                else if constexpr (promotion_to == ROOK)    return {bp, bn, bb, br, bq, bk, wp ^ from, wn, wb, wr ^ to, wq, wk, new_hash};
-                else if constexpr (promotion_to == BISHOP)  return {bp, bn, bb, br, bq, bk, wp ^ from, wn, wb ^ to, wr, wq, wk, new_hash};
-                else if constexpr (promotion_to == KNIGHT)  return {bp, bn, bb, br, bq, bk, wp ^ from, wn ^ to, wb, wr, wq, wk, new_hash};
+                if      constexpr (promotion_to == QUEEN)   return {bp, bn, bb, br, bq, bk, wp ^ from, wn, wb, wr, wq ^ to, wk, hash};
+                else if constexpr (promotion_to == ROOK)    return {bp, bn, bb, br, bq, bk, wp ^ from, wn, wb, wr ^ to, wq, wk, hash};
+                else if constexpr (promotion_to == BISHOP)  return {bp, bn, bb, br, bq, bk, wp ^ from, wn, wb ^ to, wr, wq, wk, hash};
+                else if constexpr (promotion_to == KNIGHT)  return {bp, bn, bb, br, bq, bk, wp ^ from, wn ^ to, wb, wr, wq, wk, hash};
             }
             else{
-                if      constexpr (promotion_to == QUEEN)   return {bp ^ from, bn, bb, br, bq ^ to, bk, wp, wn, wb, wr, wq, wk, new_hash};
-                else if constexpr (promotion_to == ROOK)    return {bp ^ from, bn, bb, br ^ to, bq, bk, wp, wn, wb, wr, wq, wk, new_hash};
-                else if constexpr (promotion_to == BISHOP)  return {bp ^ from, bn, bb ^ to, br, bq, bk, wp, wn, wb, wr, wq, wk, new_hash};
-                else if constexpr (promotion_to == KNIGHT)  return {bp ^ from, bn ^ to, bb, br, bq, bk, wp, wn, wb, wr, wq, wk, new_hash};
+                if      constexpr (promotion_to == QUEEN)   return {bp ^ from, bn, bb, br, bq ^ to, bk, wp, wn, wb, wr, wq, wk, hash};
+                else if constexpr (promotion_to == ROOK)    return {bp ^ from, bn, bb, br ^ to, bq, bk, wp, wn, wb, wr, wq, wk, hash};
+                else if constexpr (promotion_to == BISHOP)  return {bp ^ from, bn, bb ^ to, br, bq, bk, wp, wn, wb, wr, wq, wk, hash};
+                else if constexpr (promotion_to == KNIGHT)  return {bp ^ from, bn ^ to, bb, br, bq, bk, wp, wn, wb, wr, wq, wk, hash};
             }
         }
     }
 
-    template <CastleType castle_type>
-    FORCEINLINE static Board castle_move(const Board& old_board){
+    template <CastleType castle_type, bool change_hash>
+    FORCEINLINE static Board castle_move(const Board& old_board, const map hash_change){
         const map bp = old_board.BPawn, bn = old_board.BKnight, bb = old_board.BBishop, br = old_board.BRook, bq = old_board.BQueen, bk = old_board.BKing;
         const map wp = old_board.WPawn, wn = old_board.WKnight, wb = old_board.WBishop, wr = old_board.WRook, wq = old_board.WQueen, wk = old_board.WKing;
-        const u64 hash = old_board.hash ^ TT::w_key;
+        u64 hash = old_board.hash ^ TT::w_key;
+        if constexpr (change_hash) hash ^= hash_change;
         if constexpr        (castle_type == WHITE_OO)  return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr ^ wOO_r, wq, wk ^ wOO_k, hash ^ TT::ws_key};
         else if constexpr   (castle_type == WHITE_OOO) return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr ^ wOOO_r, wq, wk ^ wOOO_k, hash ^ TT::wl_key};
         else if constexpr   (castle_type == BLACK_OO)  return {bp, bn, bb, br ^ bOO_r, bq, bk ^ bOO_k, wp, wn, wb, wr, wq, wk, hash ^ TT::bs_key};

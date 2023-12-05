@@ -1,8 +1,7 @@
 #pragma once
 #include "variables.h"
-#include "transposition.h"
 #include <sstream>
-#include "gamestate.h"
+#include "transposition.h"
 
 namespace ZeroLogic::Misc{
 
@@ -12,9 +11,9 @@ namespace ZeroLogic::Misc{
     }
 
     template <Piece promotion_to>
-    FORCEINLINE static std::string uci_move(Square from, Square to){
-        if constexpr (promotion_to == PIECE_INVALID)    return uci_squares[from] + uci_squares[to];
-        else                                            return uci_squares[from] + uci_squares[to] + uci_promotion[promotion_to - 1];
+    FORCEINLINE static std::string uci_move(Square from, Square to) {
+        if constexpr (promotion_to == PIECE_INVALID) return uci_squares[from] + uci_squares[to];
+        else return uci_squares[from] + uci_squares[to] + uci_promotion[promotion_to - 1];
     }
 
     FORCEINLINE static Boardstate::move_container engine_move(const std::string& move, const Boardstate::Board& board, const Boardstate::State& state){
