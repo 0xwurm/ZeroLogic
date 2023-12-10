@@ -1,6 +1,7 @@
 #pragma once
 
-namespace ZeroLogic {
+namespace ZeroLogic::Search {
+    using namespace Boardstate;
 
     template<bool white>
     FORCEINLINE bool is_check(const Board &board) {

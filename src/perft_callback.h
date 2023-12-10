@@ -1,10 +1,10 @@
 #pragma once
 
-namespace ZeroLogic {
+namespace ZeroLogic::Perft {
     using namespace Boardstate;
     using namespace Movegen;
 
-    class Perft {
+    class Callback {
 
     public:
 
@@ -62,19 +62,21 @@ namespace ZeroLogic {
             auto duration_mys = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
             double sPmn = double(duration_mys) / double(overall_nodecount);
 
+            std::cout << std::endl;
             std::cout << "Overall nodes: "              << overall_nodecount                         << std::endl;
             std::cout << "Time taken: "                 << duration_ms                               << std::endl;
             std::cout << "Mn/s: "                       << overall_nodecount / duration_mys          << std::endl;
             std::cout << "s/Mn: "                       << sPmn                                      << std::endl;
             std::cout << "light distance equivalent: "  << 299792458 * 10e-7 * sPmn << " meters"     << std::endl;
             std::cout << "tt hits: "                    << tt_hits                                   << std::endl;
+            std::cout << std::endl << std::endl;
         }
 
-#define ep_hash TT::keys[TT::ep0 + (SquareOf(ep_target) % 8)]
+#define ep_hash ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(ep_target) % 8)]
 
         template<State state, bool capture, bool root>
         static FORCEINLINE void _kingmove(const Board& board, Bit& from, Bit to, vars& var, const Bit& ep_target){
-            const Board new_board = move<KING, state.white_move, capture, state.has_ep_pawn>(board, from, to, ep_hash);
+            const Board new_board = move<KING, state.white_move, capture, state.has_ep_pawn, PIECE_INVALID>(board, from, to, ep_hash);
             u32 key = new_board.hash & TT::key_mask;
             if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth == var.depth)){
                 var.partial_nodecount += TT::table[key].nodecount;
@@ -82,7 +84,7 @@ namespace ZeroLogic {
             }
             else {
                 vars new_var = {u8(var.depth - 1), 0};
-                enumerate<state.no_castles(), false, Perft>(new_board, new_var, 0);
+                enumerate<state.no_castles(), false, Callback>(new_board, new_var, 0);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, new_var.partial_nodecount);
                 if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
@@ -99,7 +101,7 @@ namespace ZeroLogic {
             }
             else {
                 vars new_var = {u8(var.depth - 1), 0};
-                enumerate<state.no_castles(), false, Perft>(new_board, new_var, 0);
+                enumerate<state.no_castles(), false, Callback>(new_board, new_var, 0);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<type>(new_var.partial_nodecount);
                 if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
@@ -108,19 +110,17 @@ namespace ZeroLogic {
 
         template<State state, bool capture, Piece piece, bool root>
         static FORCEINLINE void _silent_move(const Board& board, Bit from, Bit to, vars& var, const Bit& ep_target){
-            const Board new_board = move<piece, state.white_move, capture, state.has_ep_pawn>(board, from, to, ep_hash);
+            const Board new_board = move<piece, state.white_move, capture, state.has_ep_pawn, PIECE_INVALID>(board, from, to, ep_hash);
             u32 key = new_board.hash & TT::key_mask;
             if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth == var.depth)){
                 var.partial_nodecount += TT::table[key].nodecount;
                 ++tt_hits;
-                // std::cout << "\t" << Misc::uci_move<PIECE_INVALID>(SquareOf(from), SquareOf(to)) << ": " << TT::table[key].nodecount << "t" << std::endl;
             }
             else {
                 vars new_var = {u8(var.depth - 1), 0};
-                enumerate<state.silent_move(), false, Perft>(new_board, new_var, 0);
+                enumerate<state.silent_move(), false, Callback>(new_board, new_var, 0);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, new_var.partial_nodecount);
-                // else std::cout << "\t" << Misc::uci_move<PIECE_INVALID>(SquareOf(from), SquareOf(to)) << ": " << new_var.partial_nodecount << "r" << std::endl;
                 if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth };
             }
         }
@@ -128,7 +128,7 @@ namespace ZeroLogic {
         template<State state, bool capture, bool root>
         static FORCEINLINE void _rookmove(const Board& board, Bit from, Bit to, vars& var, const Bit& ep_target){
             constexpr bool us = state.white_move;
-            const Board new_board = move<ROOK, us, capture, state.has_ep_pawn>(board, from, to, ep_hash);
+            const Board new_board = move<ROOK, us, capture, state.has_ep_pawn, PIECE_INVALID>(board, from, to, ep_hash);
             u32 key = new_board.hash & TT::key_mask;
             if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth == var.depth)){
                 var.partial_nodecount += TT::table[key].nodecount;
@@ -139,16 +139,16 @@ namespace ZeroLogic {
                 [&]() {
                     if constexpr (state.can_oo<us>()) {
                         if (state.is_rook_right<us>(from)) {
-                            enumerate<state.no_oo<us>(), false, Perft>(new_board, new_var, 0);
+                            enumerate<state.no_oo<us>(), false, Callback>(new_board, new_var, 0);
                             return;
                         }
                     } else if constexpr (state.can_ooo<us>()) {
                         if (state.is_rook_left<us>(from)) {
-                            enumerate<state.no_ooo<us>(), false, Perft>(new_board, new_var, 0);
+                            enumerate<state.no_ooo<us>(), false, Callback>(new_board, new_var, 0);
                             return;
                         }
                     }
-                    enumerate<state.silent_move(), false, Perft>(new_board, new_var, 0);
+                    enumerate<state.silent_move(), false, Callback>(new_board, new_var, 0);
                 }();
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, new_var.partial_nodecount);
@@ -166,7 +166,7 @@ namespace ZeroLogic {
             }
             else {
                 vars new_var = {u8(var.depth - 1), 0};
-                enumerate<state.silent_move(), false, Perft>(new_board, new_var, 0);
+                enumerate<state.silent_move(), false, Callback>(new_board, new_var, 0);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, new_var.partial_nodecount);
                 if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
@@ -175,9 +175,9 @@ namespace ZeroLogic {
 
         template<State state, bool root>
         static FORCEINLINE void _pawn_push(const Board& board, Bit from, Bit to, vars& var, const Bit& ep_target){
-            map ephash = TT::keys[TT::ep0 + (SquareOf(to) % 8)];
-            if constexpr (state.has_ep_pawn) ephash ^= TT::keys[TT::ep0 + (SquareOf(ep_target) % 8)];
-            const Board new_board = move<PAWN, state.white_move, false, true>(board, from, to, ephash);
+            map ephash = ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(to) % 8)];
+            if constexpr (state.has_ep_pawn) ephash ^= ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(ep_target) % 8)];
+            const Board new_board = move<PAWN, state.white_move, false, true, PIECE_INVALID>(board, from, to, ephash);
             u32 key = new_board.hash & TT::key_mask;
             if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth == var.depth)){
                 var.partial_nodecount += TT::table[key].nodecount;
@@ -185,7 +185,7 @@ namespace ZeroLogic {
             }
             else {
                 vars new_var = {u8(var.depth - 1), 0};
-                enumerate<state.new_ep_pawn(), false, Perft>(new_board, new_var, to);
+                enumerate<state.new_ep_pawn(), false, Callback>(new_board, new_var, to);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, new_var.partial_nodecount);
                 if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
@@ -194,7 +194,7 @@ namespace ZeroLogic {
 
         template<State state, Piece promotion_to, bool capture, bool root>
         static FORCEINLINE void _promotion_move(const Board& board, Bit& from, Bit& to, vars& var, const Bit& ep_target){
-            const Board new_board = promotion_move<promotion_to, state.white_move, capture, state.has_ep_pawn>(board, from, to, ep_hash);
+            const Board new_board = move<PAWN, state.white_move, capture, state.has_ep_pawn, promotion_to>(board, from, to, ep_hash);
             u32 key = new_board.hash & TT::key_mask;
             if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth == var.depth)){
                 var.partial_nodecount += TT::table[key].nodecount;
@@ -202,12 +202,14 @@ namespace ZeroLogic {
             }
             else {
                 vars new_var = {u8(var.depth - 1), 0};
-                enumerate<state.silent_move(), false, Perft>(new_board, new_var, 0);
+                enumerate<state.silent_move(), false, Callback>(new_board, new_var, 0);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<promotion_to>(from, to, new_var.partial_nodecount);
                 if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
             }
         }
+
+#undef ep_hash
 
     public:
 
@@ -215,7 +217,7 @@ namespace ZeroLogic {
         static void go(const Board& board, u8 depth, Bit ep_target){
             init(depth);
             vars var = {depth};
-            enumerate<state, true, Perft>(board, var, ep_target);
+            enumerate<state, true, Callback>(board, var, ep_target);
             display_info();
         }
 

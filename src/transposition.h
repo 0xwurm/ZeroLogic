@@ -45,7 +45,7 @@ namespace ZeroLogic::TT {
 
 #include "gamestate.h"
 
-namespace ZeroLogic::TT{
+namespace ZeroLogic::Perft::TT{
 
     struct entry{
         u64 hash{};
@@ -53,13 +53,35 @@ namespace ZeroLogic::TT{
         u8 depth{};
     };
 
-    static constexpr u32 key_mask = 0x3ffffff;
-    static entry table[key_mask]{};
+    static u32 key_mask = 0x3ffffff;
+    static entry* table;
 
-    static void init(){
-        for (auto & i : table){
-            i = {0, 0, 0};
-        }
+    static void init(u32 size){
+        table = (entry*) calloc(size, sizeof(entry));
+        key_mask = size;
+    }
+    static void terminate(){
+        free(table);
+    }
+
+}
+namespace ZeroLogic::Search::TT{
+
+    struct entry{
+        u64 hash{};
+        u8 depth{};
+        eval val{};
+    };
+
+    static u32 key_mask = 0x3ffffff;
+    static entry* table;
+
+    static void init(u32 size){
+        table = (entry*) calloc(size, sizeof(entry));
+        key_mask = size;
+    }
+    static void terminate(){
+        free(table);
     }
 
 }
