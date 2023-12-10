@@ -74,8 +74,8 @@ namespace ZeroLogic::Misc{
     static std::string uci_eval(eval val){
         std::stringstream output;
         output << " score ";
-        if      (val >= MATE_POS)   output << "mate "  << (val - MATE_POS)/2 + 1;
-        else if (val <= MATE_NEG)   output << "mate "  << (val + MATE_POS)/2 + 1;
+        if      (val >= MATE_POS)   output << "mate "  << ceil(double(val - MATE_POS)/2);
+        else if (val <= MATE_NEG)   output << "mate "  << ceil(double(val + MATE_POS)/2);
         else                        output << "cp "    << val;
         return output.str();
     }

@@ -5,6 +5,7 @@
 namespace ZeroLogic::Movegen{
     using namespace Boardstate;
 
+    static u8 stop_depth = 0;
 
     template<bool white>
     FORCEINLINE map pawn_atk_right(const map &pieces) {
@@ -373,7 +374,8 @@ namespace ZeroLogic::Movegen{
         make_masks<state>(board, king, checkmask, kingban, rook_pin, bishop_pin, kingmoves, ep_target);
         bool found_move = false;
 
-        if (var.depth == 1){
+        if (var.depth >= stop_depth){
+            Callback::inc_seldepth(var.depth);
             if (checkmask == full) {
                 _enumerate<state, root, true, Callback>(board, rook_pin, bishop_pin, var, ep_target, kingban,found_move);
                 king_moves<state, root, true, Callback>(board, kingmoves, var, found_move, ep_target);

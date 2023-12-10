@@ -11,10 +11,11 @@ namespace ZeroLogic::Search {
 
         static inline u64 nodecount;
         static inline u32 tt_hits;
+        static inline u8 seldepth;
+
         static inline std::string bestmove;
         static inline bool better_root_move;
         static inline bool cutoff;
-        static inline u8 full_depth;
         static inline std::chrono::steady_clock::time_point start_time;
 
         struct _vals{
@@ -42,9 +43,9 @@ namespace ZeroLogic::Search {
 
             struct move_list{
                 u8 index;
-                void (*functs[100])(vars&, const Board&, _vals&);
+                void (*functs[100])(vars&, const Board&, _vals&, bool);
                 _vals vals[100];
-                void put_in(void (*funct)(vars&, const Board&, _vals&), _vals val){
+                void put_in(void (*funct)(vars&, const Board&, _vals&, bool), _vals val){
                     functs[index] = funct;
                     vals[index] = val;
                     ++index;
@@ -61,15 +62,15 @@ namespace ZeroLogic::Search {
 
         static FORCEINLINE void end_routine(vars& var, const Board board){
             for (u8 i = 0; i != var.priority1.index; ++i) {
-                var.priority1.functs[i](var, board, var.priority1.vals[i]);
+                var.priority1.functs[i](var, board, var.priority1.vals[i], true);
                 if_cutoff
             }
             for (u8 i = 0; i != var.priority2.index; ++i) {
-                var.priority2.functs[i](var, board, var.priority2.vals[i]);
+                var.priority2.functs[i](var, board, var.priority2.vals[i], false);
                 if_cutoff
             }
             for (u8 i = 0; i != var.priority3.index; ++i) {
-                var.priority3.functs[i](var, board, var.priority3.vals[i]);
+                var.priority3.functs[i](var, board, var.priority3.vals[i], false);
                 if_cutoff
             }
 
@@ -79,10 +80,13 @@ namespace ZeroLogic::Search {
 #undef if_cutoff
 
         static FORCEINLINE void mate(vars& var){
-            var.alpha = eval(MATE_POS + (full_depth - var.depth));
+            var.alpha = eval(MATE_POS + var.depth);
         }
         static FORCEINLINE void draw(vars& var){
             var.alpha = DRAW;
+        }
+        static FORCEINLINE void inc_seldepth(u8& depth){
+            if (depth > seldepth) seldepth = depth;
         }
 
     private:
@@ -106,44 +110,44 @@ namespace ZeroLogic::Search {
         }
 
 
-
-
         template<State new_state, bool leaf, bool root>
-        static FORCEINLINE void _any_move(const Board& new_board, Bit ep_target, vars& var, Bit recapture){
+        static FORCEINLINE void _any_move(const Board& new_board, Bit ep_target, vars& var, Bit recapture, bool prio1){
             u32 key = new_board.hash & TT::key_mask;
 
-            if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth >= var.depth)){
+            if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth <= var.depth)){
                 var.test<root>(TT::table[key].val);
                 ++tt_hits;
             }
             else {
                 if constexpr (leaf) {
-                    eval val = Eval::evaluate<new_state.white_move>(new_board);
-                    var.test<root>(val);
-                } else {
-                    vars new_var = {u8(var.depth - 1), -var.beta, -var.alpha, recapture};
-                    enumerate<new_state, false, Callback>(new_board, new_var, ep_target);
-                    var.test<root>(new_var.alpha);
-                    if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, var.depth, new_var.alpha};
+                    if (!(prio1 || is_check<new_state.white_move>(new_board))) {
+                        eval val = Eval::evaluate<new_state.white_move>(new_board);
+                        var.test<root>(val);
+                        return;
+                    }
                 }
+                vars new_var = {u8(var.depth + 1), -var.beta, -var.alpha, recapture};
+                enumerate<new_state, false, Callback>(new_board, new_var, ep_target);
+                var.test<root>(new_var.alpha);
+                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, var.depth, new_var.alpha};
             }
         }
 
 #define ep_hash ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(val.ep_target) % 8)]
 
         template<State state, bool capture, bool leaf, bool root>
-        static void _kingmove(vars& var, const Board& board, _vals& val) {
+        static void _kingmove(vars& var, const Board& board, _vals& val, bool prio1) {
             const Board new_board = move<KING, state.white_move, capture, state.has_ep_pawn, PIECE_INVALID>(board, val.from, val.to, ep_hash);
-            if constexpr (capture)  _any_move<state.no_castles(), leaf, root>(new_board, 0, var, val.to);
-            else                    _any_move<state.no_castles(), leaf, root>(new_board, 0, var, 0);
+            if constexpr (capture)  _any_move<state.no_castles(), leaf, root>(new_board, 0, var, val.to, prio1);
+            else                    _any_move<state.no_castles(), leaf, root>(new_board, 0, var, 0, false);
 
             if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
         }
 
         template<State state, CastleType type, bool leaf, bool root>
-        static void _castlemove(vars& var, const Board& board, _vals& val){
+        static void _castlemove(vars& var, const Board& board, _vals& val, bool prio1){
             const Board new_board = castle_move<type, state.has_ep_pawn>(board, ep_hash);
-            _any_move<state.no_castles(), leaf, root>(new_board, 0, var, 0);
+            _any_move<state.no_castles(), leaf, root>(new_board, 0, var, 0, false);
 
             if constexpr (root){
                 if (better_root_move) {
@@ -154,75 +158,77 @@ namespace ZeroLogic::Search {
         }
 
         template<State state, bool capture, Piece piece, bool leaf, bool root>
-        static void _silent_move(vars& var, const Board& board, _vals& val){
+        static void _silent_move(vars& var, const Board& board, _vals& val, bool prio1){
             const Board new_board = move<piece, state.white_move, capture, state.has_ep_pawn, PIECE_INVALID>(board, val.from, val.to, ep_hash);
-            if constexpr (capture)  _any_move<state.silent_move(), leaf, root>(new_board, 0, var, val.to);
-            else                    _any_move<state.silent_move(), leaf, root>(new_board, 0, var, 0);
+            if constexpr (capture)  _any_move<state.silent_move(), leaf, root>(new_board, 0, var, val.to, prio1);
+            else                    _any_move<state.silent_move(), leaf, root>(new_board, 0, var, 0, false);
 
             if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
         }
 
         template<State state, bool capture, bool leaf, bool root>
-        static void _rookmove(vars& var, const Board& board, _vals& val){
+        static void _rookmove(vars& var, const Board& board, _vals& val, bool prio1){
             constexpr bool us = state.white_move;
             const Board new_board = move<ROOK, us, capture, state.has_ep_pawn, PIECE_INVALID>(board, val.from, val.to, ep_hash);
 
             u32 key = new_board.hash & TT::key_mask;
-            if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth >= var.depth)){
+            if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth <= var.depth)){
                 var.test<root>(TT::table[key].val);
                 ++tt_hits;
             }
             else {
                 if constexpr (leaf) {
-                    eval pos_val = Eval::evaluate<!state.white_move>(new_board);
-                    var.test<root>(pos_val);
-                } else {
-                    vars new_var;
-                    if constexpr (capture)  new_var = {u8(var.depth - 1), -var.beta, -var.alpha, val.to};
-                    else                    new_var = {u8(var.depth - 1), -var.beta, -var.alpha, 0};
-                    [&]() {
-                        if constexpr (state.can_oo<us>()) {
-                            if (state.is_rook_right<us>(val.from)) {
-                                enumerate<state.no_oo<us>(), false, Callback>(new_board, new_var, 0);
-                                return;
-                            }
-                        } else if constexpr (state.can_ooo<us>()) {
-                            if (state.is_rook_left<us>(val.from)) {
-                                enumerate<state.no_ooo<us>(), false, Callback>(new_board, new_var, 0);
-                                return;
-                            }
-                        }
-                        enumerate<state.silent_move(), false, Callback>(new_board, new_var, 0);
-                    }();
-                    var.test<root>(new_var.alpha);
-                    if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, var.depth, new_var.alpha};
+                    if (!(prio1 || is_check<!state.white_move>(new_board))) {
+                        eval pos_val = Eval::evaluate<!state.white_move>(new_board);
+                        var.test<root>(pos_val);
+                        return;
+                    }
                 }
+                vars new_var;
+                if constexpr (capture)  new_var = {u8(var.depth + 1), -var.beta, -var.alpha, val.to};
+                else                    new_var = {u8(var.depth + 1), -var.beta, -var.alpha, 0};
+                [&]() {
+                    if constexpr (state.can_oo<us>()) {
+                        if (state.is_rook_right<us>(val.from)) {
+                            enumerate<state.no_oo<us>(), false, Callback>(new_board, new_var, 0);
+                            return;
+                        }
+                    } else if constexpr (state.can_ooo<us>()) {
+                        if (state.is_rook_left<us>(val.from)) {
+                            enumerate<state.no_ooo<us>(), false, Callback>(new_board, new_var, 0);
+                            return;
+                        }
+                    }
+                    enumerate<state.silent_move(), false, Callback>(new_board, new_var, 0);
+                }();
+                var.test<root>(new_var.alpha);
+                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, var.depth, new_var.alpha};
             }
 
             if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
         }
 
         template<State state, bool leaf, bool root>
-        static void _ep_move(vars& var, const Board& board, _vals& val){
+        static void _ep_move(vars& var, const Board& board, _vals& val, bool prio1){
             const Board new_board = Boardstate::ep_move<state.white_move>(board, val.from | val.to, val.ep_target);
-            _any_move<state.silent_move(), leaf, root>(new_board, 0, var, val.to);
+            _any_move<state.silent_move(), leaf, root>(new_board, 0, var, val.to, prio1);
 
             if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
         }
 
         template<State state, bool leaf, bool root>
-        static void _pawn_push(vars& var, const Board& board, _vals& val){
+        static void _pawn_push(vars& var, const Board& board, _vals& val, bool prio1){
             const Board new_board = move<PAWN, state.white_move, false, state.has_ep_pawn, PIECE_INVALID>(board, val.from, val.to, ep_hash);
-            _any_move<state.new_ep_pawn(), leaf, root>(new_board, val.to, var, 0);
+            _any_move<state.new_ep_pawn(), leaf, root>(new_board, val.to, var, 0, false);
 
             if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
         }
 
         template<State state, Piece promotion_to, bool capture, bool leaf, bool root>
-        static void _promotion_move(vars& var, const Board& board, _vals& val){
+        static void _promotion_move(vars& var, const Board& board, _vals& val, bool prio1){
             const Board new_board = move<PAWN, state.white_move, capture, state.has_ep_pawn, promotion_to>(board, val.from, val.to, ep_hash);
-            if constexpr (capture)  _any_move<state.silent_move(), leaf, root>(new_board, 0, var, val.to);
-            else                    _any_move<state.silent_move(), leaf, root>(new_board, 0, var, 0);
+            if constexpr (capture)  _any_move<state.silent_move(), leaf, root>(new_board, 0, var, val.to, prio1);
+            else                    _any_move<state.silent_move(), leaf, root>(new_board, 0, var, 0, false);
 
             if constexpr (root) _bestmove<promotion_to>(val.from, val.to);
         }
@@ -230,11 +236,14 @@ namespace ZeroLogic::Search {
 #undef ep_hash
 
 
-        static void init(u8 depth){
+        static void init(u8 depth, u32 hashsize){
             bestmove = "invalid move";
             better_root_move = false;
             cutoff = false;
-            full_depth = depth;
+            seldepth = 0;
+            stop_depth = depth - 1;
+            TT::clear();
+            TT::init(hashsize);
         }
 
         static void display_info(u8 depth, eval evaluation) {
@@ -243,25 +252,25 @@ namespace ZeroLogic::Search {
 
             std::stringstream info;
             info << "info"
-                 << " depth "   << int(depth)
-                 << " nodes "   << nodecount
-                 << " time "    << duration_ms
-                 << " pv "      << bestmove
+                 << " depth "       << int(depth)
+                 << " seldepth "    << int(seldepth)
+                 << " nodes "       << nodecount
+                 << " time "        << duration_ms
+                 << " pv "          << bestmove
                  << Misc::uci_eval(evaluation);
 
             std::cout << info.str() << std::endl << std::flush;
         }
 
         template<State state>
-        static void start_iteration(const Board& board, vars& var, Bit ep_target){
-            init(var.depth);
+        static void start_iteration(const Board& board, vars& var, Bit ep_target, u8 depth, u32 hashsize){
+            init(depth, hashsize);
             enumerate<state, true, Callback>(board, var, ep_target);
         }
 
-        constexpr static const eval bounds[4] = {eval(10), eval(100), eval(300), ABSOLUTE_MAX};
-
         template<State state>
-        static void start_id(const Board& board, u8 depth, Bit ep_target){
+        static void start_id(const Board& board, u8 depth, Bit ep_target, u32 hashsize){
+            const eval bounds[4] = {eval(10), eval(100), eval(300), ABSOLUTE_MAX};
             eval last_eval{}, lower_bound{10}, upper_bound{10};
             u8 curr_depth = 1;
             nodecount = 0;
@@ -271,11 +280,11 @@ namespace ZeroLogic::Search {
             int fail_low_count = 0;
             while (curr_depth != depth + 1){
                 vars curr_var;
-                if (curr_depth == 1)    curr_var = {curr_depth, ABSOLUTE_MIN, ABSOLUTE_MAX, 0};
-                else                    curr_var = {curr_depth, last_eval - lower_bound, last_eval + upper_bound, 0};
+                if (curr_depth == 1)    curr_var = {0, ABSOLUTE_MIN, ABSOLUTE_MAX, 0};
+                else                    curr_var = {0, last_eval - lower_bound, last_eval + upper_bound, 0};
 
 
-                start_iteration<state>(board, curr_var, ep_target);
+                start_iteration<state>(board, curr_var, ep_target, curr_depth, hashsize);
                 curr_var.alpha *= -1;
 
                 if      (curr_var.alpha >= (last_eval + upper_bound)) {fail_high_count++; upper_bound = bounds[fail_high_count];}
@@ -294,9 +303,9 @@ namespace ZeroLogic::Search {
 
     public:
 
-        static FORCEINLINE void check_priority(void (*_func)(vars&, const Board&, _vals&), _vals _val, vars& var){
+        static FORCEINLINE void check_priority(void (*_func)(vars&, const Board&, _vals&, bool), _vals _val, vars& var){
             if (var.recapture & _val.to)   var.priority1.put_in(_func, _val);
-            else                            var.priority2.put_in(_func, _val);
+            else                           var.priority2.put_in(_func, _val);
         }
 
         template<State state, bool capture, bool leaf, bool root>
@@ -405,8 +414,8 @@ namespace ZeroLogic::Search {
         }
 
         template<State state>
-        static void go(const Board& board, u8 depth, Bit ep_target){
-            start_id<state>(board, depth, ep_target);
+        static void go(const Board& board, u8 depth, Bit ep_target, u32 hashsize){
+            start_id<state>(board, depth, ep_target, hashsize);
             std::cout << "bestmove " << bestmove << std::endl;
         }
         template<State state>

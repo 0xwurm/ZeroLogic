@@ -21,6 +21,7 @@ namespace ZeroLogic::Perft {
         static FORCEINLINE void mate(vars& var){}
         static FORCEINLINE void draw(vars& var){}
         static FORCEINLINE void end_routine(vars& var, const Board board){}
+        static FORCEINLINE void inc_seldepth(u8& depth){}
 
     private:
 
@@ -29,6 +30,7 @@ namespace ZeroLogic::Perft {
             if (depth == 1) depth++;
             overall_nodecount = 0;
             tt_hits = 0;
+            stop_depth = depth - 1;
             start_time = std::chrono::steady_clock::now();
         }
 
@@ -83,11 +85,11 @@ namespace ZeroLogic::Perft {
                 ++tt_hits;
             }
             else {
-                vars new_var = {u8(var.depth - 1), 0};
+                vars new_var = {u8(var.depth + 1), 0};
                 enumerate<state.no_castles(), false, Callback>(new_board, new_var, 0);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, new_var.partial_nodecount);
-                if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
+                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
             }
         }
 
@@ -100,11 +102,11 @@ namespace ZeroLogic::Perft {
                 ++tt_hits;
             }
             else {
-                vars new_var = {u8(var.depth - 1), 0};
+                vars new_var = {u8(var.depth + 1), 0};
                 enumerate<state.no_castles(), false, Callback>(new_board, new_var, 0);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<type>(new_var.partial_nodecount);
-                if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
+                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
             }
         }
 
@@ -117,11 +119,11 @@ namespace ZeroLogic::Perft {
                 ++tt_hits;
             }
             else {
-                vars new_var = {u8(var.depth - 1), 0};
+                vars new_var = {u8(var.depth + 1), 0};
                 enumerate<state.silent_move(), false, Callback>(new_board, new_var, 0);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, new_var.partial_nodecount);
-                if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth };
+                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth };
             }
         }
 
@@ -135,7 +137,7 @@ namespace ZeroLogic::Perft {
                 ++tt_hits;
             }
             else {
-                vars new_var = {u8(var.depth - 1), 0};
+                vars new_var = {u8(var.depth + 1), 0};
                 [&]() {
                     if constexpr (state.can_oo<us>()) {
                         if (state.is_rook_right<us>(from)) {
@@ -152,7 +154,7 @@ namespace ZeroLogic::Perft {
                 }();
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, new_var.partial_nodecount);
-                if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
+                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
             }
         }
 
@@ -165,11 +167,11 @@ namespace ZeroLogic::Perft {
                 ++tt_hits;
             }
             else {
-                vars new_var = {u8(var.depth - 1), 0};
+                vars new_var = {u8(var.depth + 1), 0};
                 enumerate<state.silent_move(), false, Callback>(new_board, new_var, 0);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, new_var.partial_nodecount);
-                if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
+                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
             }
         }
 
@@ -184,11 +186,11 @@ namespace ZeroLogic::Perft {
                 ++tt_hits;
             }
             else {
-                vars new_var = {u8(var.depth - 1), 0};
+                vars new_var = {u8(var.depth + 1), 0};
                 enumerate<state.new_ep_pawn(), false, Callback>(new_board, new_var, to);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, new_var.partial_nodecount);
-                if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
+                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
             }
         }
 
@@ -201,11 +203,11 @@ namespace ZeroLogic::Perft {
                 ++tt_hits;
             }
             else {
-                vars new_var = {u8(var.depth - 1), 0};
+                vars new_var = {u8(var.depth + 1), 0};
                 enumerate<state.silent_move(), false, Callback>(new_board, new_var, 0);
                 var.partial_nodecount += new_var.partial_nodecount;
                 if constexpr (root) display_move_stats<promotion_to>(from, to, new_var.partial_nodecount);
-                if (var.depth > TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
+                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_var.partial_nodecount), var.depth};
             }
         }
 
@@ -216,7 +218,7 @@ namespace ZeroLogic::Perft {
         template<State state>
         static void go(const Board& board, u8 depth, Bit ep_target){
             init(depth);
-            vars var = {depth};
+            vars var = {0};
             enumerate<state, true, Callback>(board, var, ep_target);
             display_info();
         }

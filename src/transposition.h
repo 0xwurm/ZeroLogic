@@ -60,7 +60,7 @@ namespace ZeroLogic::Perft::TT{
         table = (entry*) calloc(size, sizeof(entry));
         key_mask = size;
     }
-    static void terminate(){
+    static void clear(){
         free(table);
     }
 
@@ -80,7 +80,7 @@ namespace ZeroLogic::Search::TT{
         table = (entry*) calloc(size, sizeof(entry));
         key_mask = size;
     }
-    static void terminate(){
+    static void clear(){
         free(table);
     }
 

@@ -8,7 +8,7 @@
 namespace ZeroLogic::UCI {
     static std::string engine_info = "id name ZeroLogic 1\nid author wurm\n";
     static u32 hash_size = 0x3ffffff;
-    static std::string options = "option name hashsize type spin default 67108863 min 0 max 4294967295\n";
+    static std::string options = "option name Hash type spin default 67108863 min 1 max 4294967295\n";
 
     static void position(std::istringstream& is, Boardstate::Board*& board, Boardstate::State*& state, Bit& ep_target) {
 
@@ -69,14 +69,14 @@ namespace ZeroLogic::UCI {
             if (token == "depth") {
                 is >> token;
                 Search::TT::init(hash_size);
-                Search::Callback::go<state>(board, std::stoi(token), ep_target);
-                Search::TT::terminate();
+                Search::Callback::go<state>(board, std::stoi(token), ep_target, hash_size);
+                Search::TT::clear();
             }
             else if (token == "perft") {
                 is >> token;
                 Perft::TT::init(hash_size);
                 Perft::Callback::go<state>(board, std::stoi(token), ep_target);
-                Perft::TT::terminate();
+                Perft::TT::clear();
             }
             else if (token == "single"){
                 is >> token;
@@ -113,10 +113,10 @@ namespace ZeroLogic::UCI {
             is >> std::skipws >> token;
 
             if (token == "uci") {
-                std::cout   << "id name " << engine_info
+                std::cout   << engine_info
                             << "\n"
                             << options
-                            << "\nuciok" << std::endl;
+                            << "uciok" << std::endl;
             }
             else if (token == "position") {
                 UCI::position(is, board, state, ep_target);

@@ -40,12 +40,12 @@ namespace ZeroLogic {
     inline eval operator -(eval val1, eval val2){
         int res = int(val1) - int(val2);
         if      (res > ABSOLUTE_MAX)    return ABSOLUTE_MAX;
-        else if (res < ABSOLUTE_MIN)    return ABSOLUTE_MIN;
+        else if (res < ABSOLUTE_MIN || val2 == ABSOLUTE_MAX)    return ABSOLUTE_MIN;
         else                            return eval(res);
     }
     inline eval operator +(eval val1, eval val2){
         int res = int(val1) + int(val2);
-        if      (res > ABSOLUTE_MAX)    return ABSOLUTE_MAX;
+        if      (res > ABSOLUTE_MAX || val2 == ABSOLUTE_MAX)    return ABSOLUTE_MAX;
         else if (res < ABSOLUTE_MIN)    return ABSOLUTE_MIN;
         else                            return eval(res);
     }
