@@ -98,17 +98,17 @@ namespace ZeroLogic::Lookup{
             }
         }
 
-    COMPILETIME map r_atk(Square index, map occ){
+    COMPILETIME map r_atk(const Square& index, map occ){
         return *(r_info[index].ptr + PEXT(occ, r_info[index].mask));
     }
-    COMPILETIME map r_xray(Square index, map occ){
+    COMPILETIME map r_xray(const Square& index, const map& occ){
         map attacked = r_atk(index, occ);
         return attacked ^ r_atk(index, (attacked & occ) ^ occ);
     }
-    COMPILETIME map b_atk(Square index, map occ){
+    COMPILETIME map b_atk(const Square& index, map occ){
         return *(b_info[index].ptr + PEXT(occ, b_info[index].mask));
     }
-    COMPILETIME map b_xray(Square index, map occ){
+    COMPILETIME map b_xray(const Square& index, const map& occ){
         map attacked = b_atk(index, occ);
         return attacked ^ b_atk(index, (attacked & occ) ^ occ);
     }

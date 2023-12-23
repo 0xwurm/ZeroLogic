@@ -3,10 +3,16 @@
 
 #define COMPILETIME static constexpr __forceinline
 #define FORCEINLINE __forceinline
+#define getNumNotation(char1, char2) (7 - (char1 - 97) + 8 * (char2 - 49))
+#define SquareOf(X) _tzcnt_u64(X)
+#define Bitloop(X) for(;X; X = _blsr_u64(X))
+#define BitCount(X) __popcnt64(X)
 
 namespace ZeroLogic {
     typedef unsigned char u8;
+    typedef signed char s8;
     typedef signed short s16;
+    typedef unsigned short u16;
     typedef unsigned int u32;
 	typedef unsigned long long u64;
 
@@ -14,7 +20,7 @@ namespace ZeroLogic {
     typedef u64 Bit;
     typedef unsigned char Square;
 
-    static std::string start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    static const char* start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
     enum Piece : u8 {
         PAWN = 0, ROOK, KNIGHT, BISHOP, QUEEN, KING,
@@ -28,13 +34,18 @@ namespace ZeroLogic {
 
     enum eval : signed short{
         DRAW = 0,
+        EQUAL = 0,
         MATE_POS = 32000,
         MATE_NEG = -32000,
         ABSOLUTE_MIN = -0x7fff,
-        ABSOLUTE_MAX = 0x7fff
+        ABSOLUTE_MAX = 0x7fff,
+
+        Wpwn = 1, Wbshp = 3, Wknght = 3, Wrk = 5, Wqn = 9,
+        Bpwn = -1, Bbshp = -3, Bknght = -3, Brk = -5, Bqn = -9
+
     };
 
-    inline eval operator -(eval& val){
+    constexpr inline eval operator -(eval& val){
         return eval(s16(-1) * s16(val));
     }
     inline eval operator -(eval val1, eval val2){
@@ -43,6 +54,18 @@ namespace ZeroLogic {
         else if (res < ABSOLUTE_MIN || val2 == ABSOLUTE_MAX)    return ABSOLUTE_MIN;
         else                            return eval(res);
     }
+    inline eval operator -(eval val1, int val2) {
+        int res = int(val1) - val2;
+        if (res > ABSOLUTE_MAX) return ABSOLUTE_MAX;
+        else if (res < ABSOLUTE_MIN) return ABSOLUTE_MIN;
+        else return eval(res);
+    }
+    inline eval operator +(eval val1, int val2){
+            int res = int(val1) + val2;
+            if      (res > ABSOLUTE_MAX || val2 == ABSOLUTE_MAX)    return ABSOLUTE_MAX;
+            else if (res < ABSOLUTE_MIN)    return ABSOLUTE_MIN;
+            else                            return eval(res);
+        }
     inline eval operator +(eval val1, eval val2){
         int res = int(val1) + int(val2);
         if      (res > ABSOLUTE_MAX || val2 == ABSOLUTE_MAX)    return ABSOLUTE_MAX;
@@ -50,7 +73,13 @@ namespace ZeroLogic {
         else                            return eval(res);
     }
     inline eval& operator *=(eval& val1, int val2){
-        return val1 = eval(val1 * val2);
+        int res = val1 * val2;
+        if      (res > ABSOLUTE_MAX)    return val1 = ABSOLUTE_MAX;
+        else if (res < ABSOLUTE_MIN)    return val1 = ABSOLUTE_MIN;
+        else return val1 = eval(res);
+    }
+    inline eval& operator +=(eval& val1, eval val2){
+        return val1 = val1 + val2;
     }
 
 	enum BoardConstants : const map {
@@ -74,7 +103,7 @@ namespace ZeroLogic {
 	};
 
     namespace Misc{
-        constexpr std::string uci_squares[64]{
+        static std::string uci_squares[64]{
             "h1", "g1", "f1", "e1", "d1", "c1", "b1", "a1",
             "h2", "g2", "f2", "e2", "d2", "c2", "b2", "a2",
             "h3", "g3", "f3", "e3", "d3", "c3", "b3", "a3",
@@ -84,10 +113,10 @@ namespace ZeroLogic {
             "h7", "g7", "f7", "e7", "d7", "c7", "b7", "a7",
             "h8", "g8", "f8", "e8", "d8", "c8", "b8", "a8",
         };
-        constexpr std::string uci_castles[4]{
+        static std::string uci_castles[4]{
             "e1g1", "e1c1", "e8g8", "e8c8"
         };
-        constexpr std::string uci_promotion[4]{
+        static std::string uci_promotion[4]{
             "r", "n", "b", "q"
         };
     }
@@ -129,18 +158,6 @@ namespace ZeroLogic {
 			middleStrip = 0xFFFF000000,
 			extendedStrip = 0xFFFF0000FFFF00,
 			queensStarting = 0x1000000000000010
-		};
-
-		enum castleyet : const map {
-			wks = 0x2,
-			wqs = 0x20,
-			weither = wks | wqs,
-			bks = wks << 56,
-			bqs = wqs << 56,
-			beither = bks | bqs,
-
-			wsafe = wks | (wks >> 1) | (wqs << 1) | (wqs << 2),
-			bsafe = bks | (bks >> 1) | (bqs << 1) | (bqs << 2)
 		};
 
 	}

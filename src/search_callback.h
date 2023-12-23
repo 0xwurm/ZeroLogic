@@ -5,427 +5,324 @@ namespace ZeroLogic::Search {
     using namespace Boardstate;
     using namespace Movegen;
 
-    class Callback {
-
-    public:
-
-        static inline u64 nodecount;
-        static inline u32 tt_hits;
-        static inline u8 seldepth;
-
-        static inline std::string bestmove;
-        static inline bool better_root_move;
-        static inline bool cutoff;
-        static inline std::chrono::steady_clock::time_point start_time;
-
-        struct _vals{
-            Bit from;
-            Bit to;
-            Bit ep_target;
-        };
-
-        struct vars{
-            u8 depth;
-            eval alpha;
-            eval beta;
-            Bit recapture;
-
-            template<bool root>
-            FORCEINLINE void test(eval& val){
-                if (val > alpha) {
-                    alpha = val;
-                    if (alpha >= beta)
-                        cutoff = true;
-
-                    if constexpr (root) better_root_move = true;
-                }
-            }
-
-            struct move_list{
-                u8 index;
-                void (*functs[100])(vars&, const Board&, _vals&, bool);
-                _vals vals[100];
-                void put_in(void (*funct)(vars&, const Board&, _vals&, bool), _vals val){
-                    functs[index] = funct;
-                    vals[index] = val;
-                    ++index;
-                }
-            }priority1, priority2, priority3;
-        };
-
-#define if_cutoff \
-        if (cutoff) {   \
-        var.alpha = -var.alpha; \
-        cutoff = false; \
-        return; \
-        }
-
-        static FORCEINLINE void end_routine(vars& var, const Board board){
-            for (u8 i = 0; i != var.priority1.index; ++i) {
-                var.priority1.functs[i](var, board, var.priority1.vals[i], true);
-                if_cutoff
-            }
-            for (u8 i = 0; i != var.priority2.index; ++i) {
-                var.priority2.functs[i](var, board, var.priority2.vals[i], false);
-                if_cutoff
-            }
-            for (u8 i = 0; i != var.priority3.index; ++i) {
-                var.priority3.functs[i](var, board, var.priority3.vals[i], false);
-                if_cutoff
-            }
-
-            var.alpha = -var.alpha;
-        }
-
-#undef if_cutoff
-
-        static FORCEINLINE void mate(vars& var){
-            var.alpha = eval(MATE_POS + var.depth);
-        }
-        static FORCEINLINE void draw(vars& var){
-            var.alpha = DRAW;
-        }
-        static FORCEINLINE void inc_seldepth(u8& depth){
-            if (depth > seldepth) seldepth = depth;
-        }
+    class new_Callback{
 
     private:
 
-        static FORCEINLINE void count(const map moves){
-            nodecount += BitCount(moves);
-        }
-        static FORCEINLINE void count_promo(const map moves){
-            nodecount += 4*BitCount(moves);
-        }
-        static FORCEINLINE void increment(){
-            ++nodecount;
-        }
+        static inline u32 nodecount, tt_hits;
+        static inline u8 seldepth;
+        static inline u8 full_depth;
 
-        template <Piece promotion_to>
-        static FORCEINLINE void _bestmove(Bit& from, Bit& to){
-            if (better_root_move) {
-                bestmove = Misc::uci_move<promotion_to>(SquareOf(from), SquareOf(to));
-                better_root_move = false;
-            }
-        }
+        static inline std::chrono::steady_clock::time_point start_time;
 
+        struct rated_move{
+            u16 move;
+            s8 static_rating;
+            eval (*Mcallback)(const Board&, const Bit, const u16, const u8, eval, eval);
+        };
 
-        template<State new_state, bool leaf, bool root>
-        static FORCEINLINE void _any_move(const Board& new_board, Bit ep_target, vars& var, Bit recapture, bool prio1){
-            u32 key = new_board.hash & TT::key_mask;
+#define ep_hash ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(ep_target) % 8)]
 
-            if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth <= var.depth)){
-                var.test<root>(TT::table[key].val);
-                ++tt_hits;
-            }
-            else {
-                if constexpr (leaf) {
-                    if (!(prio1 || is_check<new_state.white_move>(new_board))) {
-                        eval val = Eval::evaluate<new_state.white_move>(new_board);
-                        var.test<root>(val);
-                        return;
-                    }
-                }
-                vars new_var = {u8(var.depth + 1), -var.beta, -var.alpha, recapture};
-                enumerate<new_state, false, Callback>(new_board, new_var, ep_target);
-                var.test<root>(new_var.alpha);
-                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, var.depth, new_var.alpha};
-            }
+        template<State state, bool skip>
+        static eval Mcallback_pp(const Board& board, const Bit ep_target, const u16 enc, const u8 depth, eval Nalpha, eval Nbeta){
+            Bit from = 1ull << ((enc & 0b1111110000) >> 4);
+            Bit to = 1ull << (enc >> 10);
+            map ephash = ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(to) % 8)];
+            if constexpr (state.has_ep_pawn) ephash ^= ep_hash;
+            const Board new_board = move<PAWN, state.white_move, false, true, PIECE_INVALID>(board, from , to, ephash);
+            return eval(-loop<state.new_ep_pawn(), skip>(new_board, to, depth + 1, Nalpha, Nbeta));
         }
 
-#define ep_hash ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(val.ep_target) % 8)]
-
-        template<State state, bool capture, bool leaf, bool root>
-        static void _kingmove(vars& var, const Board& board, _vals& val, bool prio1) {
-            const Board new_board = move<KING, state.white_move, capture, state.has_ep_pawn, PIECE_INVALID>(board, val.from, val.to, ep_hash);
-            if constexpr (capture)  _any_move<state.no_castles(), leaf, root>(new_board, 0, var, val.to, prio1);
-            else                    _any_move<state.no_castles(), leaf, root>(new_board, 0, var, 0, false);
-
-            if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
-        }
-
-        template<State state, CastleType type, bool leaf, bool root>
-        static void _castlemove(vars& var, const Board& board, _vals& val, bool prio1){
-            const Board new_board = castle_move<type, state.has_ep_pawn>(board, ep_hash);
-            _any_move<state.no_castles(), leaf, root>(new_board, 0, var, 0, false);
-
-            if constexpr (root){
-                if (better_root_move) {
-                    bestmove = Misc::uci_move<type>();
-                    better_root_move = false;
-                }
-            }
-        }
-
-        template<State state, bool capture, Piece piece, bool leaf, bool root>
-        static void _silent_move(vars& var, const Board& board, _vals& val, bool prio1){
-            const Board new_board = move<piece, state.white_move, capture, state.has_ep_pawn, PIECE_INVALID>(board, val.from, val.to, ep_hash);
-            if constexpr (capture)  _any_move<state.silent_move(), leaf, root>(new_board, 0, var, val.to, prio1);
-            else                    _any_move<state.silent_move(), leaf, root>(new_board, 0, var, 0, false);
-
-            if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
-        }
-
-        template<State state, bool capture, bool leaf, bool root>
-        static void _rookmove(vars& var, const Board& board, _vals& val, bool prio1){
+        template<State state, Piece piece, bool capture, bool skip>
+        static eval Mcallback_any(const Board& board, const Bit ep_target, const u16 enc, const u8 depth, eval Nalpha, eval Nbeta){
             constexpr bool us = state.white_move;
-            const Board new_board = move<ROOK, us, capture, state.has_ep_pawn, PIECE_INVALID>(board, val.from, val.to, ep_hash);
+            Bit from = 1ull << ((enc & 0b1111110000) >> 4);
+            Bit to = 1ull << (enc >> 10);
+            const Board new_board = move<piece, us, capture, state.has_ep_pawn, PIECE_INVALID>(board, from, to, ep_hash);
 
-            u32 key = new_board.hash & TT::key_mask;
-            if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth <= var.depth)){
-                var.test<root>(TT::table[key].val);
-                ++tt_hits;
-            }
-            else {
-                if constexpr (leaf) {
-                    if (!(prio1 || is_check<!state.white_move>(new_board))) {
-                        eval pos_val = Eval::evaluate<!state.white_move>(new_board);
-                        var.test<root>(pos_val);
-                        return;
-                    }
+
+            if constexpr (piece == KING)
+                return eval(-loop<state.no_castles(), skip>(new_board, 0, depth + 1, Nalpha, Nbeta));
+
+            if constexpr (piece == ROOK){
+                if constexpr (state.can_oo<us>()) {
+                    if (state.is_rook_right<us>(from))
+                        return eval(-loop<state.no_oo(), skip>(new_board, 0, depth + 1, Nalpha, Nbeta));
                 }
-                vars new_var;
-                if constexpr (capture)  new_var = {u8(var.depth + 1), -var.beta, -var.alpha, val.to};
-                else                    new_var = {u8(var.depth + 1), -var.beta, -var.alpha, 0};
-                [&]() {
-                    if constexpr (state.can_oo<us>()) {
-                        if (state.is_rook_right<us>(val.from)) {
-                            enumerate<state.no_oo<us>(), false, Callback>(new_board, new_var, 0);
-                            return;
-                        }
-                    } else if constexpr (state.can_ooo<us>()) {
-                        if (state.is_rook_left<us>(val.from)) {
-                            enumerate<state.no_ooo<us>(), false, Callback>(new_board, new_var, 0);
-                            return;
-                        }
-                    }
-                    enumerate<state.silent_move(), false, Callback>(new_board, new_var, 0);
-                }();
-                var.test<root>(new_var.alpha);
-                if (var.depth < TT::table[key].depth) TT::table[key] = {new_board.hash, var.depth, new_var.alpha};
+                else if constexpr (state.can_ooo<us>()) {
+                    if (state.is_rook_left<us>(from))
+                        return eval(-loop<state.no_ooo(), skip>(new_board, 0, depth + 1, Nalpha, Nbeta));
+                }
             }
 
-            if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
+            return eval(-loop<state.silent_move(), skip>(new_board, 0, depth + 1, Nalpha, Nbeta));
         }
 
-        template<State state, bool leaf, bool root>
-        static void _ep_move(vars& var, const Board& board, _vals& val, bool prio1){
-            const Board new_board = Boardstate::ep_move<state.white_move>(board, val.from | val.to, val.ep_target);
-            _any_move<state.silent_move(), leaf, root>(new_board, 0, var, val.to, prio1);
-
-            if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
+        template<State state, Piece promoted, bool capture>
+        static eval Mcallback_promo(const Board& board, const Bit ep_target, const u16 enc, const u8 depth, eval Nalpha, eval Nbeta) {
+            Bit from = 1ull << ((enc & 0b1111110000) >> 4);
+            Bit to = 1ull << (enc >> 10);
+            const Board new_board = move<PAWN, state.white_move, capture, state.has_ep_pawn, promoted>(board, from, to, ep_hash);
+            return eval(-loop<state.silent_move(), true>(new_board, 0, depth + 1, Nalpha, Nbeta));
         }
 
-        template<State state, bool leaf, bool root>
-        static void _pawn_push(vars& var, const Board& board, _vals& val, bool prio1){
-            const Board new_board = move<PAWN, state.white_move, false, state.has_ep_pawn, PIECE_INVALID>(board, val.from, val.to, ep_hash);
-            _any_move<state.new_ep_pawn(), leaf, root>(new_board, val.to, var, 0, false);
-
-            if constexpr (root) _bestmove<PIECE_INVALID>(val.from, val.to);
+        template<State state, bool skip>
+        static eval Mcallback_ep(const Board& board, const Bit ep_target, const u16 enc, const u8 depth, eval Nalpha, eval Nbeta){
+            Bit from = 1ull << ((enc & 0b1111110000) >> 4);
+            Bit to = 1ull << (enc >> 10);
+            const Board new_board = Boardstate::ep_move<state.white_move>(board, from | to, ep_target);
+            return eval(-loop<state.silent_move(), skip>(new_board, 0, depth + 1, Nalpha, Nbeta));
         }
 
-        template<State state, Piece promotion_to, bool capture, bool leaf, bool root>
-        static void _promotion_move(vars& var, const Board& board, _vals& val, bool prio1){
-            const Board new_board = move<PAWN, state.white_move, capture, state.has_ep_pawn, promotion_to>(board, val.from, val.to, ep_hash);
-            if constexpr (capture)  _any_move<state.silent_move(), leaf, root>(new_board, 0, var, val.to, prio1);
-            else                    _any_move<state.silent_move(), leaf, root>(new_board, 0, var, 0, false);
-
-            if constexpr (root) _bestmove<promotion_to>(val.from, val.to);
+        template<State state, CastleType ct>
+        static eval Mcallback_castles(const Board& board, const Bit ep_target, const u16 enc, const u8 depth, eval Nalpha, eval Nbeta){
+            const Board new_board = castle_move<ct, state.has_ep_pawn>(board, ep_hash);
+            return eval(-loop<state.no_castles(), false>(new_board, 0, depth + 1, Nalpha, Nbeta));
         }
 
 #undef ep_hash
 
+    public:
 
-        static void init(u8 depth, u32 hashsize){
-            bestmove = "invalid move";
-            better_root_move = false;
-            cutoff = false;
-            seldepth = 0;
-            stop_depth = depth - 1;
-            TT::clear();
-            TT::init(hashsize);
+        using specific = rated_move*;
+
+        static void check_hash_move(const Board& board, rated_move* start, const rated_move*& end, const u32& hash_key){
+            if (TT::table[hash_key].hash == board.hash){
+                const u16 hashmove = TT::table[hash_key].move;
+                for (rated_move* head = start; head < end; ++head){
+                    if (head->move == hashmove){
+                        head->static_rating = 50;
+                        break;
+                    }
+                }
+            }
         }
 
-        static void display_info(u8 depth, eval evaluation) {
+        static void selsort(rated_move start[200], const rated_move* end){
+            rated_move* best = start;
+            for (rated_move* head = start + 1; head < end; ++head){
+                if (head->static_rating > best->static_rating)
+                    best = head;
+            }
+            rated_move buffer = *start;
+            *start = *best;
+            *best = buffer;
+        }
+
+        template <State state, bool skip>
+        static eval loop(const Board& board, Bit ep_target, const u8 depth, eval alpha, eval beta){
+
+            if constexpr (!skip) {
+                if (depth >= full_depth) {
+                    if (depth > seldepth) seldepth = depth;
+                    ++nodecount;
+                    return Eval::evaluate<state.white_move>(board);
+                }
+            }
+
+            rated_move ml_start[200]{};
+            rated_move* movelist = ml_start;
+
+            {
+                map rook_pin = 0, bishop_pin = 0, kingban = 0, checkmask, kingmoves;
+                make_masks<state>(board, checkmask, kingban, rook_pin, bishop_pin, kingmoves, ep_target);
+                if (checkmask == full) enumerate<state, false, false, new_Callback>(board, ep_target, depth, movelist, checkmask, rook_pin, bishop_pin, kingban, kingmoves);
+                else enumerate<state, false, true, new_Callback>(board, ep_target, depth, movelist, checkmask, rook_pin, bishop_pin, kingban, kingmoves);
+
+                if (ml_start == movelist) {
+                    if (checkmask != full) return MATE_NEG + depth;
+                    return DRAW;
+                }
+            }
+
+            const rated_move *ml_end = movelist;
+
+            // check for hash move
+            const u32 hash_key = board.hash & TT::key_mask;
+            check_hash_move(board, ml_start, ml_end, hash_key);
+
+            u16 bestmove{};
+            for (rated_move* head = ml_start; head < ml_end; ++head){
+
+                selsort(head, ml_end);
+                if (head->static_rating < -10) break;
+                eval nodeval = head->Mcallback(board, ep_target, head->move, depth, -beta, -alpha);
+
+
+                if (nodeval > alpha) {
+                    alpha = nodeval;
+                    bestmove = head->move;
+
+                    if (alpha >= beta) {
+                        if ((full_depth - depth) > TT::table[hash_key].depth)
+                            TT::table[hash_key] = {board.hash, u8(full_depth - depth), bestmove};
+                        return beta;
+                    }
+                }
+            }
+
+            if ((full_depth - depth) >= TT::table[hash_key].depth)
+                TT::table[hash_key] = {board.hash, u8(full_depth - depth), bestmove};
+
+            return alpha;
+        }
+
+        static void display_info(const Board& board, State state, const Bit ep_target, eval evaluation) {
             auto duration = std::chrono::steady_clock::now() - start_time;
             auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+            if (!duration_ms) duration_ms = 1;
 
             std::stringstream info;
-            info << "info"
-                 << " depth "       << int(depth)
-                 << " seldepth "    << int(seldepth)
-                 << " nodes "       << nodecount
-                 << " time "        << duration_ms
-                 << " pv "          << bestmove
-                 << Misc::uci_eval(evaluation);
+            info    << "info"
+                    << " depth "        << int(full_depth)
+                    << " seldepth "     << int(seldepth)
+                    << " score "        << Misc::uci_eval(evaluation)
+                    << " time "         << duration_ms
+                    << " nodes "        << nodecount
+                    << " nps "          << 1000 * (u64(nodecount) / duration_ms)
+                    << " pv"            << Misc::uci_pv(board, state, ep_target, full_depth);
 
             std::cout << info.str() << std::endl << std::flush;
         }
 
         template<State state>
-        static void start_iteration(const Board& board, vars& var, Bit ep_target, u8 depth, u32 hashsize){
-            init(depth, hashsize);
-            enumerate<state, true, Callback>(board, var, ep_target);
+        static eval go_iteration(const Board& board, const Bit& ep_target, u8 depth, eval alpha, eval beta){
+            seldepth = 0;
+            full_depth = depth;
+
+            return loop<state, false>(board, ep_target, 0, alpha, beta);
         }
 
         template<State state>
-        static void start_id(const Board& board, u8 depth, Bit ep_target, u32 hashsize){
-            const eval bounds[4] = {eval(10), eval(100), eval(300), ABSOLUTE_MAX};
-            eval last_eval{}, lower_bound{10}, upper_bound{10};
-            u8 curr_depth = 1;
+        static void go(const Board& board, const Bit& ep_target, u8 depth){
             nodecount = 0;
+            tt_hits = 0;
             start_time = std::chrono::steady_clock::now();
+            eval wlow = eval(25), whigh = eval(25), last_val = EQUAL;
 
-            int fail_high_count = 0;
-            int fail_low_count = 0;
-            while (curr_depth != depth + 1){
-                vars curr_var;
-                if (curr_depth == 1)    curr_var = {0, ABSOLUTE_MIN, ABSOLUTE_MAX, 0};
-                else                    curr_var = {0, last_eval - lower_bound, last_eval + upper_bound, 0};
+            for (u8 currdepth = 1; currdepth <= depth; ){
+                eval val = go_iteration<state>(board, ep_target, currdepth, last_val - wlow, last_val + whigh);
 
-
-                start_iteration<state>(board, curr_var, ep_target, curr_depth, hashsize);
-                curr_var.alpha *= -1;
-
-                if      (curr_var.alpha >= (last_eval + upper_bound)) {fail_high_count++; upper_bound = bounds[fail_high_count];}
-                else if (curr_var.alpha <= (last_eval - lower_bound)) {fail_low_count++; lower_bound = bounds[fail_low_count];}
-                else{
-                    display_info(curr_depth, curr_var.alpha);
-                    last_eval = curr_var.alpha;
-                    lower_bound = eval(10);
-                    upper_bound = eval(10);
-                    curr_depth++;
-                    fail_high_count = 0;
-                    fail_low_count = 0;
+                if      (val <= last_val - wlow)    wlow *= 5;
+                else if (val >= last_val + whigh)   whigh *= 5;
+                else {
+                    last_val = val;
+                    wlow = eval(25);
+                    whigh = eval(25);
+                    currdepth++;
+                    display_info(board, state, ep_target, val);
+                    if (abs(last_val) > 30000) break;
                 }
             }
+
+            std::cout << "bestmove " << Misc::uci_move(TT::table[board.hash & TT::key_mask].move) << std::endl;
         }
 
-    public:
+        template<State state>
+        static void go_single(const Board& board, const Bit& ep_target, u8 depth){
+            nodecount = 0;
+            tt_hits = 0;
+            start_time = std::chrono::steady_clock::now();
 
-        static FORCEINLINE void check_priority(void (*_func)(vars&, const Board&, _vals&, bool), _vals _val, vars& var){
-            if (var.recapture & _val.to)   var.priority1.put_in(_func, _val);
-            else                           var.priority2.put_in(_func, _val);
+            eval val = go_iteration<state>(board, ep_target, depth, ABSOLUTE_MIN, ABSOLUTE_MAX);
+            display_info(board, state, ep_target, val);
         }
 
-        template<State state, bool capture, bool leaf, bool root>
-        static FORCEINLINE void promotion_sort(_vals _val, vars& var){
-            var.priority1.put_in(_promotion_move<state, QUEEN, capture, leaf, root>, _val);
-
-            var.priority3.put_in(_promotion_move<state, ROOK, capture, leaf, root>, _val);
-            var.priority3.put_in(_promotion_move<state, KNIGHT, capture, leaf, root>, _val);
-            var.priority3.put_in(_promotion_move<state, BISHOP, capture, leaf, root>, _val);
-        }
-
-        template<State state, bool root, bool leaf>
-        static FORCEINLINE void kingmove(const Board& board, map& moves, map& captures, vars& var, const Bit& ep_target){
-            constexpr bool us = state.white_move;
-            if constexpr (leaf) count(moves | captures);
-            Bit king = King<us>(board);
+        template<State state, bool root, bool check>
+        static FORCEINLINE void kingmove(const Board& board, map& moves, map& captures, const Bit& ep_target, const u8& depth, rated_move*& movelist){
+            const u16 king_from = SquareOf(King<state.white_move>(board)) << 4;
             Bitloop(moves)
-                var.priority3.put_in(_kingmove<state, false, leaf, root>, {king, 1ull << SquareOf(moves), 0});
-            Bitloop(captures)
-                check_priority(_kingmove<state, true, leaf, root>, {king, 1ull << SquareOf(captures), 0}, var);
+                *(movelist++) = {u16((SquareOf(moves) << 10) | king_from), -1, Mcallback_any<state, KING, false, check>};
+            Bitloop(captures) {
+                const Bit to = 1ull << SquareOf(captures);
+                const s8 sval = captured_piece_val<state.white_move>(board, to);
+                if constexpr (state.white_move) *(movelist++) = {u16((SquareOf(captures) << 10) | king_from), s8(-sval), (sval) ? Mcallback_any<state, KING, true, true> : Mcallback_any<state, KING, true, check>};
+                else                            *(movelist++) = {u16((SquareOf(captures) << 10) | king_from), sval, (sval) ? Mcallback_any<state, KING, true, true> : Mcallback_any<state, KING, true, check>};
+            }
         }
 
-        template<State state, bool root, bool leaf>
-        static FORCEINLINE void ep_move(const Board& board, Bit& lep, Bit& rep, const Bit& ep_target, vars& var){
+        template<State state, bool root, bool check>
+        static FORCEINLINE void ep_move(const Board& board, Bit& lep, Bit& rep, const Bit& ep_target, const u8& depth, rated_move*& movelist){
             constexpr bool us = state.white_move;
-            if constexpr (leaf) {
-                if (lep) increment();
-                if (rep) increment();
-            }
-            if (lep) var.priority2.put_in(_ep_move<state, leaf, root>, {lep, pawn_atk_left<us>(lep), ep_target});
-            if (rep) var.priority2.put_in(_ep_move<state, leaf, root>, {rep, pawn_atk_right<us>(rep), ep_target});
+            if (lep) *(movelist++) = {u16((SquareOf(pawn_atk_left<us>(lep)) << 10) | (SquareOf(lep) << 4)), 1, Mcallback_ep<state, check>};
+            if (rep) *(movelist++) = {u16((SquareOf(pawn_atk_right<us>(rep)) << 10) | (SquareOf(rep) << 4)), 1, Mcallback_ep<state, check>};
         }
 
-        template<State state, bool root, bool leaf>
-        static FORCEINLINE void pawn_move(const Board& board, map& pr, map& pl, map& pr_promo, map& pl_promo, map& pf, map& pp, map& pf_promo, vars& var, const Bit& ep_target){
-            if constexpr (leaf){
-                count(pr);
-                count(pl);
-                count_promo(pr_promo);
-                count_promo(pl_promo);
-                count(pf | pp);
-                count_promo(pf_promo);
-            }
+        template<State state, bool root, bool check>
+        static FORCEINLINE void pawn_move(const Board& board, map& pr, map& pl, map& pr_promo, map& pl_promo, map& pf, map& pp, map& pf_promo, const Bit& ep_target, const u8& depth, rated_move*& movelist){
             constexpr bool us = state.white_move;
             Bitloop(pr){
-                Square sq = SquareOf(pr);
-                check_priority(_silent_move<state, true, PAWN, leaf, root>, {1ull << (sq + pawn_shift[0][us]), 1ull << sq, 0}, var);
+                const u16 to = SquareOf(pr), from = to + pawn_shift[0][us];
+                s8 sval = static_rate<us, PAWN>(board, u8(to), 1ull << from, 1ull << to);
+                *(movelist++) = {u16((to << 10) | (from << 4)), sval, (sval) ? Mcallback_any<state, PAWN, true, true> : Mcallback_any<state, PAWN, true, check>};
             }
             Bitloop(pl){
-                Square sq = SquareOf(pl);
-                check_priority(_silent_move<state, true, PAWN, leaf, root>, {1ull << (sq + pawn_shift[1][us]), 1ull << sq, 0}, var);
+                const u16 to = SquareOf(pl), from = to + pawn_shift[1][us];
+                s8 sval = static_rate<us, PAWN>(board, to, 1ull << from, 1ull << to);
+                *(movelist++) = {u16((to << 10) | (from << 4)), sval, (sval) ? Mcallback_any<state, PAWN, true, true> : Mcallback_any<state, PAWN, true, check>};
             }
             Bitloop(pr_promo){
-                Square sq = SquareOf(pr_promo); Bit from = 1ull << (sq + pawn_shift[0][us]), to = 1ull << sq;
-                promotion_sort<state, true, leaf, root>({from, to, 0}, var);
+                const u16 to = SquareOf(pr_promo), from = to + pawn_shift[0][us], move = (to << 10) | (from << 4);
+                const eval see_val = static_rate<us, PAWN>(board, to, 1ull << from, 1ull << to);
+                *(movelist++) = {u16(move | 0b0100), s8(see_val + Wqn), Mcallback_promo<state, QUEEN, true>};
+                *(movelist++) = {u16(move | 0b0010), s8(see_val + Wknght), Mcallback_promo<state, KNIGHT, true>};
+                *(movelist++) = {u16(move | 0b0001), s8(see_val), Mcallback_promo<state, ROOK, true>};
+                *(movelist++) = {u16(move | 0b0011), s8(see_val), Mcallback_promo<state, BISHOP, true>};
             }
             Bitloop(pl_promo){
-                Square sq = SquareOf(pl_promo); Bit from = 1ull << (sq + pawn_shift[1][us]), to = 1ull << sq;
-                promotion_sort<state, true, leaf, root>({from, to, 0}, var);
+                const u16 to = SquareOf(pl_promo), from = to + pawn_shift[1][us], move = (to << 10) | (from << 4);
+                const eval see_val = static_rate<us, PAWN>(board, to, 1ull << from, 1ull << to);
+                *(movelist++) = {u16(move | 0b0100), s8(see_val + Wqn), Mcallback_promo<state, QUEEN, true>};
+                *(movelist++) = {u16(move | 0b0010), s8(see_val + Wknght), Mcallback_promo<state, KNIGHT, true>};
+                *(movelist++) = {u16(move | 0b0001), s8(see_val), Mcallback_promo<state, ROOK, true>};
+                *(movelist++) = {u16(move | 0b0011), s8(see_val), Mcallback_promo<state, BISHOP, true>};
             }
             Bitloop(pf){
-                Square sq = SquareOf(pf);
-                var.priority3.put_in(_silent_move<state, false, PAWN, leaf, root>, {1ull << (sq + sign<us>(-8)), 1ull << sq, 0});
+                const u16 to = SquareOf(pf);
+                *(movelist++) = {u16((to << 10) | ((to + sign<us>(-8)) << 4)), -1, Mcallback_any<state, PAWN, false, check>};
             }
             Bitloop(pf_promo){
-                Square sq = SquareOf(pf_promo); Bit from = 1ull << (sq + sign<us>(-8)), to = 1ull << sq;
-                promotion_sort<state, false, leaf, root>({from, to, 0}, var);
+                const u16 to = SquareOf(pf_promo), from = to + sign<us>(-8), move = (to << 10) | (from << 4);
+                *(movelist++) = {u16(move | 0b0100), Wqn, Mcallback_promo<state, QUEEN, false>};
+                *(movelist++) = {u16(move | 0b0010), Wknght, Mcallback_promo<state, KNIGHT, false>};
+                *(movelist++) = {u16(move | 0b0001), EQUAL, Mcallback_promo<state, ROOK, false>};
+                *(movelist++) = {u16(move | 0b0011), EQUAL, Mcallback_promo<state, BISHOP, false>};
             }
             Bitloop(pp){
-                Square sq = SquareOf(pp);
-                var.priority3.put_in(_pawn_push<state, leaf, root>, {1ull << (sq + sign<us>(-16)), 1ull << sq, 0});
+                const u8 to = SquareOf(pp);
+                *(movelist++) = {u16((to << 10) | ((to + sign<us>(-16)) << 4)), -1, Mcallback_pp<state, check>};
             }
         }
 
-        template<State state, Piece piece, bool root, bool leaf>
-        static FORCEINLINE void silent_move(const Board& board, map& moves, map& captures, const Square& sq, vars& var, const Bit& ep_target){
-            if constexpr (leaf)
-                count(moves | captures);
+        template<State state, Piece piece, bool root, bool check>
+        static FORCEINLINE void silent_move(const Board& board, map& moves, map& captures, const Square& from, const Bit& ep_target, const u8& depth, rated_move*& movelist){
+            u16 fromshift = u16(from) << 4;
             Bitloop(moves)
-                var.priority3.put_in(_silent_move<state, false, piece, leaf, root>, {1ull << sq, 1ull << SquareOf(moves), 0});
-            Bitloop(captures)
-                check_priority(_silent_move<state, true, piece, leaf, root>, {1ull << sq, 1ull << SquareOf(captures), 0}, var);
+                *(movelist++) = {u16((SquareOf(moves) << 10) | fromshift), -1, Mcallback_any<state, piece, false, check>};
+            Bitloop(captures){
+                const u16 to = SquareOf(captures);
+                s8 sval = static_rate<state.white_move, piece>(board, u8(to), 1ull << from, 1ull << to);
+                *(movelist++) = {u16((to << 10) | fromshift), sval, (sval) ? Mcallback_any<state, piece, true, true> : Mcallback_any<state, piece, true, check>};
+            }
         }
 
-        template<State state, bool root, bool leaf>
-        static FORCEINLINE void rookmove(const Board& board, map& moves, map& captures, const Square& sq, vars& var, const Bit& ep_target){
-            if constexpr (leaf)
-                count(moves | captures);
-            Bitloop(moves)
-                var.priority3.put_in(_rookmove<state, false, leaf, root>, {1ull << sq, 1ull << SquareOf(moves), 0});
-            Bitloop(captures)
-                check_priority(_rookmove<state, true, leaf, root>, {1ull << sq, 1ull << SquareOf(captures), 0}, var);
+        template<State state, bool root, bool check>
+        static FORCEINLINE void rookmove(const Board& board, map& moves, map& captures, const Square& sq, const Bit& ep_target, const u8& depth, rated_move*& movelist){
+            silent_move<state, ROOK, root, check>(board, moves, captures, sq, ep_target, depth, movelist);
         }
 
         template<State state, bool left, bool root, bool leaf>
-        static FORCEINLINE void castlemove(const Board& board, vars& var, const Bit& ep_target){
-            if constexpr (leaf) increment();
+        static FORCEINLINE void castlemove(const Board& board, const Bit& ep_target, const u8& depth, rated_move*& movelist){
             if constexpr (left) {
-                if constexpr (state.white_move) var.priority3.put_in(_castlemove<state, WHITE_OOO, leaf, root>, {});
-                else                            var.priority3.put_in(_castlemove<state, BLACK_OOO, leaf, root>, {});
+                if constexpr (state.white_move) *(movelist++) = {(5 << 10) | (3 << 4) | 0b1000, -1, Mcallback_castles<state, WHITE_OOO>};
+                else                            *(movelist++) = {(61 << 10) | (59 << 4) | 0b1000, -1, Mcallback_castles<state, BLACK_OOO>};
             }
             else {
-                if constexpr (state.white_move) var.priority3.put_in(_castlemove<state, WHITE_OO, leaf, root>, {});
-                else                            var.priority3.put_in(_castlemove<state, BLACK_OO, leaf, root>, {});
+                if constexpr (state.white_move) *(movelist++) = {(1 << 10) | (3 << 4) | 0b1000, -1, Mcallback_castles<state, WHITE_OO>};
+                else                            *(movelist++) = {(57 << 10) | (59 << 4) | 0b1000, -1, Mcallback_castles<state, BLACK_OO>};
             }
         }
 
-        template<State state>
-        static void go(const Board& board, u8 depth, Bit ep_target, u32 hashsize){
-            start_id<state>(board, depth, ep_target, hashsize);
-            std::cout << "bestmove " << bestmove << std::endl;
-        }
-        template<State state>
-        static void go_single(const Board& board, u8 depth, Bit ep_target){
-            nodecount = 0;
-            start_time = std::chrono::steady_clock::now();
-            vars var = {depth, ABSOLUTE_MIN, ABSOLUTE_MAX, 0};
-            start_iteration<state>(board, var, ep_target);
-            display_info(depth, -var.alpha);
-            std::cout << "bestmove " << bestmove << std::endl;
-        }
     };
+
 }

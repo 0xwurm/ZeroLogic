@@ -58,6 +58,8 @@ namespace ZeroLogic::Perft::TT{
 
     static void init(u32 size){
         table = (entry*) calloc(size, sizeof(entry));
+        for (u32 s = 0; s <= size; s++)
+            table[s].depth = 0xff;
         key_mask = size;
     }
     static void clear(){
@@ -67,10 +69,21 @@ namespace ZeroLogic::Perft::TT{
 }
 namespace ZeroLogic::Search::TT{
 
+    // move encoding:
+    // 111111  (6) - to
+    // 111111  (6) - from
+    // 1111    (4) - flags
+
+    // 1000 - castles
+    // 0001 - rook promotion
+    // 0010 - knight promotion
+    // 0011 - bishop promotion
+    // 0100 - queen promotion
+
     struct entry{
         u64 hash{};
         u8 depth{};
-        eval val{};
+        u16 move{};
     };
 
     static u32 key_mask = 0x3ffffff;

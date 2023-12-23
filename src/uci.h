@@ -6,11 +6,11 @@
 #include "search_callback.h"
 
 namespace ZeroLogic::UCI {
-    static std::string engine_info = "id name ZeroLogic 1\nid author wurm\n";
+    static const char* engine_info = "id name ZeroLogic 1\nid author wurm\n";
     static u32 hash_size = 0x3ffffff;
-    static std::string options = "option name Hash type spin default 67108863 min 1 max 4294967295\n";
+    static const char* options = "option name Hash type spin default 67108863 min 1 max 4294967295\n";
 
-    static void position(std::istringstream& is, Boardstate::Board*& board, Boardstate::State*& state, Bit& ep_target) {
+    static void position(std::istringstream& is, Misc::boardstate*& bdst) {
 
         std::string token, fen;
 
@@ -27,21 +27,13 @@ namespace ZeroLogic::UCI {
         else
             return;
 
-        // leakage
-        board = new Boardstate::Board(Boardstate::fen<true>(fen));
-        state = new Boardstate::State(Boardstate::fen<false>(fen));
-        if (state->white_move)  ep_target = Boardstate::fen<true, true>(fen);
-        else                    ep_target = Boardstate::fen<false, true>(fen);
+        // yep! IT LEAKS (maybe)
+        bool wm = bdst->state.white_move;
+        bdst = new Misc::boardstate({Misc::fen<true>(fen), Misc::fen<false>(fen), Misc::fen(fen, wm)});
 
         while (is >> token) {
-            Boardstate::move_container move = Misc::engine_move(token, *board, *state);
-            board = new Boardstate::Board(Boardstate::move(move));
-            state = new Boardstate::State(Boardstate::change_state(move));
-            ep_target = Boardstate::ep_state(move);
+            bdst = new Misc::boardstate(Misc::noInfo_move(*bdst, getNumNotation(token[0], token[1]), getNumNotation(token[2], token[3]), token[4]));
         }
-        board = new Boardstate::Board(board->BPawn, board->BKnight, board->BBishop, board->BRook, board->BQueen, board->BKing,
-                                      board->WPawn, board->WKnight, board->WBishop, board->WRook, board->WQueen, board->WKing,
-                                      Boardstate::hash_position(*board, *state, ep_target));
     }
 
     static void setoption(std::istringstream& is){
@@ -69,18 +61,20 @@ namespace ZeroLogic::UCI {
             if (token == "depth") {
                 is >> token;
                 Search::TT::init(hash_size);
-                Search::Callback::go<state>(board, std::stoi(token), ep_target, hash_size);
+                Search::new_Callback::go<state>(board, ep_target, std::stoi(token));
                 Search::TT::clear();
             }
             else if (token == "perft") {
                 is >> token;
                 Perft::TT::init(hash_size);
-                Perft::Callback::go<state>(board, std::stoi(token), ep_target);
+                // Perft::Callback::go<state>(board, std::stoi(token), ep_target);
                 Perft::TT::clear();
             }
             else if (token == "single"){
                 is >> token;
-                // Search::go_single<state>(board, std::stoi(token), ep_target);
+                Search::TT::init(hash_size);
+                Search::new_Callback::go_single<state>(board, ep_target, std::stoi(token));
+                Search::TT::clear();
             }
 
     }
@@ -89,13 +83,7 @@ namespace ZeroLogic::UCI {
 
         Movegen::init_lookup();
         TT::init_keys();
-        Boardstate::State* state;
-        Boardstate::Board* board;
-        Boardstate::State start_state = Boardstate::State::normal();
-        state = &start_state;
-        Boardstate::Board start_board = Boardstate::fen<true>(start_fen);
-        board = &start_board;
-        Bit ep_target = 0;
+        auto* bdst = new Misc::boardstate({Misc::fen<true>(start_fen), Misc::fen<false>(start_fen), 0});
 
         std::string token, cmd;
 
@@ -119,7 +107,7 @@ namespace ZeroLogic::UCI {
                             << "uciok" << std::endl;
             }
             else if (token == "position") {
-                UCI::position(is, board, state, ep_target);
+                UCI::position(is, bdst);
             }
             else if (token == "isready") {
                 std::cout << "readyok\n";
@@ -128,79 +116,79 @@ namespace ZeroLogic::UCI {
                 setoption(is);
             }
             else if (token == "d"){
-                std::cout << "Fen: " << b_to_fen(*board, *state, ep_target) << std::endl;
+                std::cout << "Fen: " << Misc::convert_fen(*bdst) << std::endl;
                 char hex_hash[100];
-                std::sprintf(hex_hash, "%llX", hash_position(*board, *state, ep_target));
+                std::sprintf(hex_hash, "%llX", bdst->board.hash);
                 std::cout << "Key: " << hex_hash << std::endl;
             }
             else if (token == "go") {
-                // template instantiation hell
-                bool WM = state->white_move, EP = state->has_ep_pawn, WL = state->white_ooo;
-                bool WR = state->white_oo, BL = state->black_ooo, BR = state->black_oo;
-                if      ( WM &&  EP &&  WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, true, true, true, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP &&  WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, true, true, true, true, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP &&  WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, true, true, false, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP &&  WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, true, true, true, false, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP &&  WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, true, false, true, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP &&  WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, true, true, false, true, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP &&  WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, true, false, false, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP &&  WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, true, true, false, false, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP && !WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, false, true, false, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP && !WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, true, false, true, false, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP && !WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, false, true, true, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP && !WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, true, false, true, true, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP && !WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, false, false, true, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP && !WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, true, false, false, true, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP && !WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, false, false, false, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM &&  EP && !WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, true, false, false, false, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP &&  WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, true, true, true, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP &&  WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, false, true, true, true, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP &&  WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, true, true, false, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP &&  WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, false, true, true, false, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP &&  WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, true, false, true, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP &&  WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, false, true, false, true, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP &&  WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, true, false, false, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP &&  WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, false, true, false, false, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP && !WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, false, true, true, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP && !WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, false, false, true, true, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP && !WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, false, true, false, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP && !WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, false, false, true, false, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP && !WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, false, false, true, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP && !WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, false, false, false, true, false}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP && !WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, false, false, false, true}; go<go_state>(is, *board, ep_target); }
-                else if ( WM && !EP && !WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, false, false, false, false, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP &&  WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, true, true, true, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP &&  WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, true, true, true, true, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP &&  WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, true, true, false, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP &&  WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, true, true, true, false, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP &&  WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, true, false, true, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP &&  WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, true, true, false, true, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP &&  WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, true, false, false, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP &&  WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, true, true, false, false, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP && !WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, false, true, true, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP && !WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, true, false, true, true, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP && !WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, false, true, false, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP && !WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, true, false, true, false, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP && !WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, false, false, true, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP && !WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, true, false, false, true, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP && !WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, false, false, false, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM &&  EP && !WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, true, false, false, false, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP &&  WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, true, true, true, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP &&  WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, false, true, true, true, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP &&  WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, true, true, false, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP &&  WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, false, true, true, false, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP &&  WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, true, false, true, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP &&  WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, false, true, false, true, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP &&  WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, true, false, false, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP &&  WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, false, true, false, false, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP && !WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, false, true, true, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP && !WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, false, false, true, true, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP && !WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, false, true, false, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP && !WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, false, false, true, false, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP && !WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, false, false, true, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP && !WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, false, false, false, true, false}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP && !WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, false, false, false, true}; go<go_state>(is, *board, ep_target); }
-                else if (!WM && !EP && !WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, false, false, false, false, false}; go<go_state>(is, *board, ep_target); }
+                // necessary for template-instatiation
+                bool WM = bdst->state.white_move, EP = bdst->state.has_ep_pawn, WL = bdst->state.white_ooo;
+                bool WR = bdst->state.white_oo, BL = bdst->state.black_ooo, BR = bdst->state.black_oo;
+                if      ( WM &&  EP &&  WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, true, true, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP &&  WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, true, true, true, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP &&  WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, true, true, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP &&  WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, true, true, true, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP &&  WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, true, false, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP &&  WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, true, true, false, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP &&  WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, true, false, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP &&  WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, true, true, false, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP && !WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, false, true, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP && !WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, true, false, true, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP && !WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, false, true, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP && !WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, true, false, true, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP && !WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, false, false, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP && !WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, true, false, false, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP && !WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, true, false, false, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM &&  EP && !WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, true, false, false, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP &&  WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, true, true, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP &&  WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, false, true, true, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP &&  WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, true, true, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP &&  WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, false, true, true, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP &&  WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, true, false, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP &&  WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, false, true, false, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP &&  WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, true, false, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP &&  WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, false, true, false, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP && !WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, false, true, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP && !WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, false, false, true, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP && !WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, false, true, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP && !WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, false, false, true, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP && !WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, false, false, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP && !WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {true, false, false, false, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP && !WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {true, false, false, false, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if ( WM && !EP && !WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {true, false, false, false, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP &&  WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, true, true, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP &&  WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, true, true, true, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP &&  WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, true, true, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP &&  WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, true, true, true, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP &&  WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, true, false, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP &&  WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, true, true, false, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP &&  WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, true, false, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP &&  WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, true, true, false, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP && !WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, false, true, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP && !WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, true, false, true, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP && !WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, false, true, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP && !WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, true, false, true, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP && !WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, false, false, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP && !WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, true, false, false, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP && !WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, true, false, false, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM &&  EP && !WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, true, false, false, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP &&  WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, true, true, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP &&  WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, false, true, true, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP &&  WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, true, true, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP &&  WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, false, true, true, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP &&  WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, true, false, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP &&  WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, false, true, false, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP &&  WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, true, false, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP &&  WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, false, true, false, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP && !WR &&  WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, false, true, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP && !WR &&  WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, false, false, true, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP && !WR &&  WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, false, true, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP && !WR &&  WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, false, false, true, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP && !WR && !WL &&  BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, false, false, true, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP && !WR && !WL &&  BR && !BL)       { constexpr Boardstate::State go_state = {false, false, false, false, true, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP && !WR && !WL && !BR &&  BL)       { constexpr Boardstate::State go_state = {false, false, false, false, false, true}; go<go_state>(is, bdst->board, bdst->ep_target); }
+                else if (!WM && !EP && !WR && !WL && !BR && !BL)       { constexpr Boardstate::State go_state = {false, false, false, false, false, false}; go<go_state>(is, bdst->board, bdst->ep_target); }
             }
 
         } while (token != "quit");
