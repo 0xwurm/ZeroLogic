@@ -1,9 +1,6 @@
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "modernize-use-nodiscard"
 #pragma once
-#include "intrin.h"
-#include "misc.h"
-#include <algorithm>
 
 namespace ZeroLogic::Boardstate {
 
@@ -179,10 +176,10 @@ namespace ZeroLogic::Boardstate {
         const map wp = old_board.WPawn, wn = old_board.WKnight, wb = old_board.WBishop, wr = old_board.WRook, wq = old_board.WQueen, wk = old_board.WKing;
         u64 hash = old_board.hash ^ TT::w_key;
         if constexpr (change_hash) hash ^= hash_change;
-        if constexpr        (castle_type == WHITE_OO)  return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr ^ wOO_r, wq, wk ^ wOO_k, hash ^ TT::ws_key};
-        else if constexpr   (castle_type == WHITE_OOO) return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr ^ wOOO_r, wq, wk ^ wOOO_k, hash ^ TT::wl_key};
-        else if constexpr   (castle_type == BLACK_OO)  return {bp, bn, bb, br ^ bOO_r, bq, bk ^ bOO_k, wp, wn, wb, wr, wq, wk, hash ^ TT::bs_key};
-        else if constexpr   (castle_type == BLACK_OOO) return {bp, bn, bb, br ^ bOOO_r, bq, bk ^ bOOO_k, wp, wn, wb, wr, wq, wk, hash ^ TT::bl_key};
+        if constexpr        (castle_type == WHITE_OO)  return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr ^ 0x5, wq, wk ^ 0xa, hash ^ TT::ws_key};
+        else if constexpr   (castle_type == WHITE_OOO) return {bp, bn, bb, br, bq, bk, wp, wn, wb, wr ^ 0x90, wq, wk ^ 0x28, hash ^ TT::wl_key};
+        else if constexpr   (castle_type == BLACK_OO)  return {bp, bn, bb, br ^ (5ull << 56), bq, bk ^ (0xaull << 56), wp, wn, wb, wr, wq, wk, hash ^ TT::bs_key};
+        else if constexpr   (castle_type == BLACK_OOO) return {bp, bn, bb, br ^ (0x90ull << 56), bq, bk ^ (0x28ull << 56), wp, wn, wb, wr, wq, wk, hash ^ TT::bl_key};
     }
 
     template <Piece piece, bool white_move, Piece taken, Piece promotion>

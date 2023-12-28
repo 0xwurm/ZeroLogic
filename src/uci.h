@@ -1,13 +1,19 @@
 #pragma once
+#include "tables.h"
 #include "misc.h"
 #include "movegenerator.h"
+#ifdef USE_INTRIN
 #include <chrono>
-#include "perft_callback.h"
+#endif
 #include "search_callback.h"
 
 namespace ZeroLogic::UCI {
     static const char* engine_info = "id name ZeroLogic 1\nid author wurm\n";
+#ifdef USE_INTRIN
     static u32 hash_size = 0x3ffffff;
+#else
+    static u32 hash_size = 0x7ffff;
+#endif
     static const char* options = "option name Hash type spin default 67108863 min 1 max 4294967295\n";
 
     static void position(std::istringstream& is, Misc::boardstate*& bdst) {
@@ -61,7 +67,7 @@ namespace ZeroLogic::UCI {
             if (token == "depth") {
                 is >> token;
                 Search::TT::init(hash_size);
-                Search::new_Callback::go<state>(board, ep_target, std::stoi(token));
+                Search::go<state>(board, ep_target, std::stoi(token));
                 Search::TT::clear();
             }
             else if (token == "perft") {
@@ -73,8 +79,33 @@ namespace ZeroLogic::UCI {
             else if (token == "single"){
                 is >> token;
                 Search::TT::init(hash_size);
-                Search::new_Callback::go_single<state>(board, ep_target, std::stoi(token));
+                Search::go_single<state>(board, ep_target, std::stoi(token));
                 Search::TT::clear();
+            }
+            else if (token == "eval"){
+                std::cout << Evaluation::evaluate<state.white_move>(board) << std::endl;
+            }
+            else if (token == "see"){
+                is >> token;
+                const u8 from = getNumNotation(token[0], token[1]);
+                const u8 to = getNumNotation(token[2], token[3]);
+                const Bit fromB = 1ull << from;
+                const Bit toB = 1ull << to;
+                const bool promotion = token[4];
+                constexpr bool us = state.white_move;
+
+                Value val{};
+                if (fromB & Boardstate::Pawns<us>(board)) {
+                    if (promotion)  val = Search::Static::rate<us, PAWN, true, true>(board, to, fromB, toB, 0);
+                    else            val = Search::Static::rate<us, PAWN, true, false>(board, to, fromB, toB, 0);
+                }
+                else if (fromB & Boardstate::Rooks<us>(board))      val = Search::Static::rate<us, ROOK, true, false>(board, to, fromB, toB, 0);
+                else if (fromB & Boardstate::Bishops<us>(board))    val = Search::Static::rate<us, BISHOP, true, false>(board, to, fromB, toB, 0);
+                else if (fromB & Boardstate::Knights<us>(board))    val = Search::Static::rate<us, KNIGHT, true, false>(board, to, fromB, toB, 0);
+                else if (fromB & Boardstate::Queens<us>(board))     val = Search::Static::rate<us, QUEEN, true, false>(board, to, fromB, toB, 0);
+                else if (fromB & Boardstate::King<us>(board))       val = Search::Static::rate<us, KING, true, false>(board, to, fromB, toB, 0);
+
+                std::cout << "SEE: " << val << std::endl;
             }
 
     }
@@ -83,6 +114,7 @@ namespace ZeroLogic::UCI {
 
         Movegen::init_lookup();
         TT::init_keys();
+        Evaluation::init_tables();
         auto* bdst = new Misc::boardstate({Misc::fen<true>(start_fen), Misc::fen<false>(start_fen), 0});
 
         std::string token, cmd;

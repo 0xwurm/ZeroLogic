@@ -1,8 +1,5 @@
 #pragma once
-#include "variables.h"
 #include <sstream>
-#include "transposition.h"
-#include "gamestate.h"
 
 namespace ZeroLogic::Misc{
 
@@ -17,11 +14,21 @@ namespace ZeroLogic::Misc{
         else return uci_squares[from] + uci_squares[to] + uci_promotion[promotion_to - 1];
     }
 
-    static std::string uci_move(u16 enc){
+    static FORCEINLINE Square Mfrom(Move enc){
+        return enc & 0b111111;
+    }
+    static FORCEINLINE Square Mto(Move enc){
+        return enc >> 10;
+    }
+    static FORCEINLINE u16 Mflag(Move enc){
+        return (enc >> 6) & 0b1111;
+    }
 
-        Square from = (enc & 0b1111110000) >> 4;
-        Square to = enc >> 10;
-        u16 flag = enc & 0b1111;
+    static std::string uci_move(Move enc){
+
+        Square from = Mfrom(enc);
+        Square to = Mto(enc);
+        u16 flag = Mflag(enc);
 
         if (flag & 0b111){
             flag &= 0b111;
@@ -72,11 +79,11 @@ namespace ZeroLogic::Misc{
         }
 
         // castles
-        if (bdst.board.WKing & w_king_start) {
+        if (bdst.board.WKing & 0b1000ull) {
             if      (from == 3 && to == 1) return {Boardstate::castle_move<WHITE_OO, true>(bdst.board, hash_change), bdst.state.no_castles(), 0};
             else if (from == 3 && to == 5) return {Boardstate::castle_move<WHITE_OOO, true>(bdst.board, hash_change), bdst.state.no_castles(), 0};
         }
-        if (bdst.board.BKing & b_king_start){
+        if (bdst.board.BKing & (0b1000ull << 56)){
             if      (from == 59 && to == 57) return {Boardstate::castle_move<BLACK_OO, true>(bdst.board, hash_change), bdst.state.no_castles(), 0};
             else if (from == 59 && to == 61) return {Boardstate::castle_move<BLACK_OOO, true>(bdst.board, hash_change), bdst.state.no_castles(), 0};
         }
@@ -241,15 +248,15 @@ namespace ZeroLogic::Misc{
     static std::string uci_pv(const Boardstate::Board& board, Boardstate::State& state, const Bit ep_target, u8 full_depth){
         u64 hash = board.hash;
         u32 key = hash & Search::TT::key_mask;
-        u16 mov = Search::TT::table[key].move;
+        Move mov = Search::TT::table[key].move;
         std::stringstream output;
         auto* bdst = new boardstate{board, state, ep_target};
         int counter = 0;
 
-        while (Search::TT::table[key].hash == hash && counter < (full_depth + 4) && (mov >> 10) != ((mov & 0b1111110000) >> 4)){
+        while (Search::TT::table[key].hash == hash && counter < (full_depth + 4) && Mfrom(mov) != Mto(mov)){
             counter++;
             output << " " << uci_move(mov);
-            bdst = new boardstate{noInfo_move(*bdst, (mov & 0b1111110000) >> 4, mov >> 10, promochar[(mov & 0b111) - 1])};
+            bdst = new boardstate{noInfo_move(*bdst, Mfrom(mov), Mto(mov), promochar[((mov >> 6) & 0b111) - 1])};
             hash = bdst->board.hash;
             key = hash & Search::TT::key_mask;
             mov = Search::TT::table[key].move;
@@ -257,7 +264,7 @@ namespace ZeroLogic::Misc{
         return output.str();
     }
 
-    static std::string uci_eval(eval val){
+    static std::string uci_eval(Value val){
         std::stringstream output;
         if      (val >= 30000)   output << "mate "  << ceil(double(MATE_POS - val)/2);
         else if (val <= -30000)   output << "mate "  << ceil(double(MATE_NEG - val)/2);

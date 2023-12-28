@@ -1,17 +1,34 @@
 #pragma once
 
-namespace ZeroLogic::Eval{
-
-    // ++ nodecount
+namespace ZeroLogic::Evaluation{
 
     // eval in centipawns
     template <bool white>
-    static eval evaluate(const Boardstate::Board& board){
-        u64 val =   BitCount(board.WPawn) - BitCount(board.BPawn);
-            val +=  3 * (BitCount(board.WBishop | board.WKnight) - BitCount(board.BBishop | board.BKnight));
-            val +=  5 * (BitCount(board.WRook) - BitCount(board.BRook));
-            val +=  9 * (BitCount(board.WQueen) - BitCount(board.BQueen));
-        if constexpr (!white) val *= -1;
-        return static_cast<eval>(100 * val);
+    FORCEINLINE static Value evaluate(const Boardstate::Board& board){
+        map brd[2][6] =
+                {
+                {board.BPawn, board.BRook, board.BKnight, board.BBishop, board.BQueen, board.BKing},
+                {board.WPawn, board.WRook, board.WKnight, board.WBishop, board.WQueen, board.WKing}
+                };
+
+        Value mg_val{}, eg_val{}, gamephase{};
+        for (int p = 0; p < 6; p++){
+            Bitloop(brd[white][p]){
+                Square sq = SquareOf(brd[white][p]);
+                mg_val += mg_table[white][p][sq];
+                eg_val += eg_table[white][p][sq];
+                gamephase += gamephaseInc[p];
+            }
+            Bitloop(brd[!white][p]){
+                Square sq = SquareOf(brd[!white][p]);
+                mg_val -= mg_table[!white][p][sq];
+                eg_val -= eg_table[!white][p][sq];
+                gamephase += gamephaseInc[p];
+            }
+        }
+        int mgPhase = gamephase;
+        if (mgPhase > 24) mgPhase = 24;
+        int egPhase = 24 - mgPhase;
+        return (mg_val * mgPhase + eg_val * egPhase) / 24;
     }
 }

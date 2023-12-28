@@ -7,6 +7,7 @@ project(
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_EXE_LINKER_FLAGS "-static")
+set(CMAKE_CXX_FLAGS "-DUSE_INTRIN")
 add_compile_options("-mbmi2")
 add_compile_options("-mbmi")
 
@@ -20,6 +21,6 @@ add_executable(ZeroLogic
         src/movegenerator.h
         src/misc.h
         src/perft_callback.h
-        src/search_helpers.h
-        src/transposition.h
-        src/search_callback.h)
+        src/static.h
+        src/search_callback.h
+        src/search.h)

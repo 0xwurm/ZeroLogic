@@ -1,6 +1,4 @@
 #pragma once
-#include "tables.h"
-#include "eval.h"
 
 namespace ZeroLogic::Movegen{
     using namespace Boardstate;
@@ -347,7 +345,7 @@ namespace ZeroLogic::Movegen{
     }
 
     template <State state, bool root, bool leaf, class Callback>
-    void enumerate(const Board& board, Bit& ep_target, const u8& depth, typename Callback::specific& s, map& checkmask, map& rook_pin, map& bishop_pin, map& kingban, map& kingmoves){
+    FORCEINLINE void enumerate(const Board& board, Bit& ep_target, const u8& depth, typename Callback::specific& s, map& checkmask, map& rook_pin, map& bishop_pin, map& kingban, map& kingmoves){
         if (checkmask == full) {
             _enumerate<state, root, leaf, Callback>(board, rook_pin, bishop_pin, kingban, ep_target, depth, s);
             king_moves<state, root, leaf, Callback>(board, kingmoves, ep_target, depth, s);
@@ -366,6 +364,18 @@ namespace ZeroLogic::Movegen{
         make_masks<state>(board, checkmask, kingban, rook_pin, bishop_pin, kingmoves, ep_target);
 
         enumerate<state, root, leaf, Callback>(board, ep_target, depth, s, checkmask, rook_pin, bishop_pin, kingban, kingmoves);
+    }
+    template <State state, SearchType st, class Callback>
+    FORCEINLINE bool enumerate(const Board& board, Bit& ep_target, const u8& depth, typename Callback::specific& s){
+        map rook_pin = 0, bishop_pin = 0, kingban = 0, checkmask, kingmoves;
+        make_masks<state>(board, checkmask, kingban, rook_pin, bishop_pin, kingmoves, ep_target);
+
+        if (checkmask != full) {
+            enumerate<state, st, true, Callback>(board, ep_target, depth, s, checkmask, rook_pin, bishop_pin, kingban, kingmoves);
+            return true;
+        }
+        enumerate<state, st, false, Callback>(board, ep_target, depth, s, checkmask, rook_pin, bishop_pin, kingban, kingmoves);
+        return false;
     }
 
     COMPILETIME void init_lookup(){
