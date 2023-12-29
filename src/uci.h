@@ -2,14 +2,15 @@
 #include "tables.h"
 #include "misc.h"
 #include "movegenerator.h"
-#ifdef USE_INTRIN
+#ifdef NOT_CALCULATOR
 #include <chrono>
 #endif
 #include "search_callback.h"
+#include "perft_callback.h"
 
 namespace ZeroLogic::UCI {
     static const char* engine_info = "id name ZeroLogic 1\nid author wurm\n";
-#ifdef USE_INTRIN
+#ifdef NOT_CALCULATOR
     static u32 hash_size = 0x3ffffff;
 #else
     static u32 hash_size = 0x7ffff;

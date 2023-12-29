@@ -9,7 +9,7 @@ namespace ZeroLogic::Search {
     static inline u8 seldepth;
     static inline u8 full_depth;
 
-#ifdef USE_INTRIN
+#ifdef NOT_CALCULATOR
     static inline std::chrono::steady_clock::time_point start_time;
 #endif
 

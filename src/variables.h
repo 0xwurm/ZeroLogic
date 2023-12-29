@@ -5,7 +5,7 @@
 #define COMPILETIME static constexpr FORCEINLINE
 #define getNumNotation(char1, char2) (7 - (char1 - 97) + 8 * (char2 - 49))
 
-#ifdef USE_INTRIN
+#ifdef NOT_CALCULATOR
 #include <immintrin.h>
 #include <intrin.h>
 #define PEXT(X, Y) _pext_u64(X, Y)

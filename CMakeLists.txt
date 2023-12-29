@@ -7,7 +7,7 @@ project(
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_EXE_LINKER_FLAGS "-static")
-set(CMAKE_CXX_FLAGS "-DUSE_INTRIN")
+set(CMAKE_CXX_FLAGS "-DNOT_CALCULATOR")
 add_compile_options("-mbmi2")
 add_compile_options("-mbmi")
 
