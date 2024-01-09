@@ -19,7 +19,7 @@ namespace ZeroLogic::Misc{
             if (counter == 4)
             {
                 counter = 1;
-                res += ".";
+                res += ",";
             }
             res += num[i];
         }
