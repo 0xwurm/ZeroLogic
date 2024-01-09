@@ -1,27 +1,49 @@
 #pragma once
 #include <sstream>
+#include <algorithm>
 
 namespace ZeroLogic::Misc{
 
+
+    template<typename T>
+    std::string format(T x)
+    {
+        std::string num = std::to_string(x);
+        if (x < 1000) return num;
+
+        int counter = 0;
+        std::string res;
+        for (int i = int(num.size()) - 1; i >= 0; i--)
+        {
+            counter++;
+            if (counter == 4)
+            {
+                counter = 1;
+                res += ".";
+            }
+            res += num[i];
+        }
+        std::reverse(res.begin(), res.end());
+        return res;
+    }
+
     template <CastleType type>
-    static std::string _uci_move(){
-        return uci_castles[type];
-    }
+    static std::string _uci_move(){ return uci_castles[type]; }
 
-    template <Piece promotion_to>
+    template <Piece promotion_to = PIECE_NONE>
     static std::string _uci_move(Square from, Square to) {
-        if constexpr (promotion_to == PIECE_INVALID) return uci_squares[from] + uci_squares[to];
-        else return uci_squares[from] + uci_squares[to] + uci_promotion[promotion_to - 1];
+        if constexpr (promotion_to == PIECE_NONE) return uci_squares[from] + uci_squares[to];
+        return uci_squares[from] + uci_squares[to] + uci_promotion[promotion_to - 1];
     }
 
-    static FORCEINLINE Square Mfrom(Move enc){
-        return enc & 0b111111;
-    }
-    static FORCEINLINE Square Mto(Move enc){
-        return enc >> 10;
-    }
-    static FORCEINLINE u16 Mflag(Move enc){
-        return (enc >> 6) & 0b1111;
+    static Square Mfrom(Move enc){ return enc & 0b111111; }
+    static Square Mto(Move enc){ return enc >> 10; }
+    static u16 Mflag(Move enc){ return (enc >> 6) & 0b1111; }
+
+    static Piece getPromo(Move enc){
+        u16 flag = Mflag(enc);
+        if (flag & 0b111) return Piece(flag & 0b111);
+        return PIECE_NONE;
     }
 
     static std::string uci_move(Move enc){
@@ -48,220 +70,111 @@ namespace ZeroLogic::Misc{
         return _uci_move<PIECE_INVALID>(from, to);
     }
 
-    struct boardstate{
-            Boardstate::Board board;
-            Boardstate::State state;
-            Bit ep_target;
-        };
-
-    static boardstate noInfo_move(boardstate& bdst, u8 from, u8 to, char promotion){
-
-        u64 hash_change{};
-        if (bdst.ep_target) hash_change = ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(bdst.ep_target) % 8)];
-        Bit fromsq = 1ull << from, tosq = 1ull << to;
-        bool capture = tosq & bdst.board.Occ, nepp = false, ep = false;
-        Piece promotion_to = PIECE_INVALID;
-
-        // special pawn moves
-        if (fromsq & (bdst.board.WPawn | bdst.board.BPawn)){
-            if ((abs(from - to) == 7 || abs(from - to) == 9) && !capture) // ep
-                ep = true;
-            else if (abs(from - to) == 16){ // pp
-                hash_change ^= TT::keys[TT::ep0 + (to % 8)];
-                nepp = true;
-            }
-            else if (tosq & (EIGHTH_RANK | FIRST_RANK)){ // promotion
-                if      (promotion == 'q') promotion_to = QUEEN;
-                else if (promotion == 'r') promotion_to = ROOK;
-                else if (promotion == 'n') promotion_to = KNIGHT;
-                else if (promotion == 'b') promotion_to = BISHOP;
-            }
-        }
-
-        // castles
-        if (bdst.board.WKing & 0b1000ull) {
-            if      (from == 3 && to == 1) return {Boardstate::castle_move<WHITE_OO, true>(bdst.board, hash_change), bdst.state.no_castles(), 0};
-            else if (from == 3 && to == 5) return {Boardstate::castle_move<WHITE_OOO, true>(bdst.board, hash_change), bdst.state.no_castles(), 0};
-        }
-        if (bdst.board.BKing & (0b1000ull << 56)){
-            if      (from == 59 && to == 57) return {Boardstate::castle_move<BLACK_OO, true>(bdst.board, hash_change), bdst.state.no_castles(), 0};
-            else if (from == 59 && to == 61) return {Boardstate::castle_move<BLACK_OOO, true>(bdst.board, hash_change), bdst.state.no_castles(), 0};
-        }
-
-        if (ep) {
-            if (bdst.state.white_move)   return {Boardstate::ep_move<true>(bdst.board, fromsq | tosq, bdst.ep_target), bdst.state.silent_move(), 0};
-            else                    return {Boardstate::ep_move<false>(bdst.board, fromsq | tosq, bdst.ep_target), bdst.state.silent_move(), 0};
-        }
-
-        Boardstate::Board bd = Boardstate::noT_move(bdst.board, fromsq, tosq, bdst.state.white_move, capture, promotion_to, hash_change);
-        if (nepp)                                           return {bd, bdst.state.new_ep_pawn(), tosq};
-        if (fromsq & (bdst.board.WKing | bdst.board.BKing)) return {bd, bdst.state.no_castles(), 0};
-        if (fromsq & (bdst.board.WRook | bdst.board.BKing)) {
-            if ((bdst.state.white_move) ? Boardstate::State::is_rook_left<true>(fromsq) : Boardstate::State::is_rook_left<false>(fromsq))
-                return {bd, bdst.state.no_ooo(), 0};
-            if ((bdst.state.white_move) ? Boardstate::State::is_rook_right<true>(fromsq) : Boardstate::State::is_rook_right<false>(fromsq))
-                return {bd, bdst.state.no_oo(), 0};
-        }
-        return {bd, bdst.state.silent_move(), 0};
+    template<CastleType ct>
+    bool isCastles(Piece m, Square f, Square t){
+        File destF = ct == SHORT ? FILE_G : FILE_C;
+        return ~m == KING
+               && (f == RANK_ONE + FILE_E || f == RANK_EIGHT + FILE_E)
+               && (t == RANK_ONE + destF || t == RANK_EIGHT + destF);
+    }
+    template<Color c, CastleType ct>
+    bool isLoudRook(Piece m, Square f, const Castling cs) {
+        Square check = ct == SHORT ?
+                       (c == WHITE ? 0 : 56) :
+                       (c == WHITE ? 7 : 63);
+        return ~m == ROOK
+               && cs[ct]
+               && f == check;
+    }
+    bool isPP(Piece m, Square f, Square t) {
+        return ~m == PAWN
+               && abs(f - t) == 16;
+    }
+    bool isEP(Piece m, Piece c, Square f, Square t) {
+        return ~m == PAWN
+               && c == PIECE_NONE
+               && abs(f - t) % 2;
     }
 
-    static Bit fen(std::string fen, bool white_move){
-        fen.erase(0, fen.find(' ') + 1);
-        fen.erase(0, fen.find(' ') + 1);
-        fen.erase(0, fen.find(' ') + 1);
-        if (fen.front() == '-') return 0;
-        else if (white_move)    return 1ull << (getNumNotation(fen[0], fen[1]) - 8);
-        else                    return 1ull << (getNumNotation(fen[0], fen[1]) + 8);
+    template<Color c>
+    static std::string moves(Position<c> pos, std::istringstream *is);
+    template<Color c>
+    static std::string uci_pv(Position<c> pos);
+
+#define func(npos) is ? moves(npos, is) : uci_pv(npos)
+
+    template<Color c>
+    static std::string standaloneSilent(Position<c> pos, Bit from, Bit to, Piece moved, Piece promo, std::istringstream* is) {
+        if (~moved == PAWN) {
+            if (promo == PIECE_NONE)    return func((pos.template move_silent<PAWN>(from, to)));
+            if (promo == QUEEN)         return func((pos.template move_silent<PAWN, QUEEN>(from, to)));
+            if (promo == ROOK)          return func((pos.template move_silent<PAWN, ROOK>(from, to)));
+            if (promo == KNIGHT)        return func((pos.template move_silent<PAWN, KNIGHT>(from, to)));
+            if (promo == BISHOP)        return func((pos.template move_silent<PAWN, BISHOP>(from, to)));
+        }
+        if (~moved == KNIGHT)   return func((pos.template move_silent<KNIGHT>(from, to)));
+        if (~moved == BISHOP)   return func((pos.template move_silent<BISHOP>(from, to)));
+        if (~moved == ROOK)     return func((pos.template move_silent<ROOK>(from, to)));
+        if (~moved == QUEEN)    return func((pos.template move_silent<QUEEN>(from, to)));
+        if (~moved == KING)     return func((pos.template move_silent<KING>(from, to)));
+        return "";
     }
 
-    template <bool board>
-    static auto fen(std::string fen){
-        if constexpr (board) {
-            map bp{}, bn{}, bb{}, br{}, bq{}, bk{};
-            map wp{}, wn{}, wb{}, wr{}, wq{}, wk{};
-            u64 hash{};
-            Bit index_bit = 1ull << 63;
+    template<Color c>
+    static std::string standaloneMoves(Position<c> pos, Square from, Square to, Piece promo, std::istringstream* is = nullptr) {
+        Bit fromBit = 1ull << from;
+        Bit toBit = 1ull << to;
 
-            std::string position_fen = fen.substr(0, fen.find(' '));
-            for (char t: position_fen) {
-                if (t == '/') continue;
-                if (t - 60 > 0) {
-                    switch (t) {
-                        case 'p': bp |= index_bit; hash ^= TT::get_key<PAWN, false>(SquareOf(index_bit)); break;
-                        case 'P': wp |= index_bit; hash ^= TT::get_key<PAWN, true>(SquareOf(index_bit)); break;
-                        case 'r': br |= index_bit; hash ^= TT::get_key<ROOK, false>(SquareOf(index_bit)); break;
-                        case 'R': wr |= index_bit; hash ^= TT::get_key<ROOK, true>(SquareOf(index_bit)); break;
-                        case 'b': bb |= index_bit; hash ^= TT::get_key<BISHOP, false>(SquareOf(index_bit)); break;
-                        case 'B': wb |= index_bit; hash ^= TT::get_key<BISHOP, true>(SquareOf(index_bit)); break;
-                        case 'n': bn |= index_bit; hash ^= TT::get_key<KNIGHT, false>(SquareOf(index_bit)); break;
-                        case 'N': wn |= index_bit; hash ^= TT::get_key<KNIGHT, true>(SquareOf(index_bit)); break;
-                        case 'q': bq |= index_bit; hash ^= TT::get_key<QUEEN, false>(SquareOf(index_bit)); break;
-                        case 'Q': wq |= index_bit; hash ^= TT::get_key<QUEEN, true>(SquareOf(index_bit)); break;
-                        case 'k': bk |= index_bit; hash ^= TT::get_key<KING, false>(SquareOf(index_bit)); break;
-                        case 'K': wk |= index_bit; hash ^= TT::get_key<KING, true>(SquareOf(index_bit)); break;
-                        default:
-                            std::cout << "invalid fen: '" << fen << "'" << std::endl;
-                            return Boardstate::Board{bp, bn, bb, br, bq, bk, wp, wn, wb, wr, wq, wk, hash};
-                    }
-                    index_bit >>= 1;
-                } else index_bit >>= (t - 48);
-            }
+        Piece moved = pos.getPiece(from);
+        Piece captured = pos.getPiece(to);
 
-            fen.erase(0, fen.find(' ') + 1);
-            if (fen.front() == 'w') hash ^= TT::w_key;
+        if (isCastles<SHORT>(moved, from, to))
+            return func(pos.template move_castles<SHORT>());
+        if (isCastles<LONG>(moved, from, to))
+            return func(pos.template move_castles<LONG>());
 
-            fen.erase(0, fen.find(' ') + 1);
+        if (isPP(moved, from, to))
+            return func(pos.move_pp(fromBit, toBit));
+        if (isEP(moved, captured, from, to))
+            return func(pos.move_ep(fromBit, toBit));
 
-            if (fen.contains('K')) hash ^= TT::ws_key;
-            if (fen.contains('Q')) hash ^= TT::wl_key;
-            if (fen.contains('k')) hash ^= TT::bs_key;
-            if (fen.contains('q')) hash ^= TT::bl_key;
+        if (isLoudRook<c, SHORT>(moved, from, pos.cs))
+            return func(pos.template move_loudRook<SHORT>(fromBit, toBit));
+        if (isLoudRook<c, LONG>(moved, from, pos.cs))
+            return func(pos.template move_loudRook<LONG>(fromBit, toBit));
 
-            fen.erase(0, fen.find(' ') + 1);
-
-            if (fen.front() != '-'){
-                int file = getNumNotation(fen[0], fen[1]) % 8;
-                hash ^= TT::keys[TT::ep0 + file];
-            }
-
-            return Boardstate::Board{bp, bn, bb, br, bq, bk, wp, wn, wb, wr, wq, wk, hash};
-        }
-        else{
-            bool white, wOO, wOOO, bOO, bOOO, ep;
-            fen.erase(0, fen.find(' ') + 1);
-            white = fen.front() == 'w';
-
-            fen.erase(0, fen.find(' ') + 1);
-
-            wOO = fen.contains('K');
-            wOOO = fen.contains('Q');
-            bOO = fen.contains('k');
-            bOOO = fen.contains('q');
-
-            fen.erase(0, fen.find(' ') + 1);
-
-            ep = fen.front() != '-';
-
-            return Boardstate::State{white, ep, wOO, wOOO, bOO, bOOO};
-        }
+        return standaloneSilent(pos, fromBit, toBit, moved, promo, is);
     }
 
-    static std::string convert_fen(Misc::boardstate& bdst){
-        Bit head = 1ull << 63;
-        int empty = 0, sq = 0;
-        std::stringstream fen;
-        do{
-            if (!(sq % 8)){
-                if (empty){
-                    fen << empty;
-                    empty = 0;
-                }
-                if (sq != 64 && sq) fen << "/";
-            }
+#undef func
 
-            if ((head & bdst.board.Occ)){
-                if (empty){
-                    fen << empty;
-                    empty = 0;
-                }
-                if      (head & bdst.board.WPawn)       fen << "P";
-                else if (head & bdst.board.BPawn)       fen << "p";
-                else if (head & bdst.board.WBishop)     fen << "B";
-                else if (head & bdst.board.BBishop)     fen << "b";
-                else if (head & bdst.board.WKnight)     fen << "N";
-                else if (head & bdst.board.BKnight)     fen << "n";
-                else if (head & bdst.board.WRook)       fen << "R";
-                else if (head & bdst.board.BRook)       fen << "r";
-                else if (head & bdst.board.WQueen)      fen << "Q";
-                else if (head & bdst.board.BQueen)      fen << "q";
-                else if (head & bdst.board.WKing)       fen << "K";
-                else if (head & bdst.board.BKing)       fen << "k";
-            }
-            else empty++;
-            sq++;
-        }while (head >>= 1);
-        if (empty) fen << empty;
+    template <Color c>
+    static std::string moves(Position<c> pos, std::istringstream* is){
+        std::string token;
+        if (*is >> token){
+            Square from = getNumNotation(token[0], token[1]);
+            Square to = getNumNotation(token[2], token[3]);
+            Piece promo = PIECE_NONE;
+            if (token[4] == 'q') promo = QUEEN;
+            if (token[4] == 'b') promo = BISHOP;
+            if (token[4] == 'n') promo = KNIGHT;
+            if (token[4] == 'r') promo = ROOK;
 
-        fen << " " << ((bdst.state.white_move) ? "w" : "b") << " ";
-
-        if (bdst.state.can_castle<true>() || bdst.state.can_castle<false>()) {
-            if (bdst.state.white_oo)    fen << "K";
-            if (bdst.state.white_ooo)   fen << "Q";
-            if (bdst.state.black_oo)    fen << "k";
-            if (bdst.state.black_ooo)   fen << "q";
+            return Misc::standaloneMoves(pos, from, to, promo, is);
         }
-        else fen << "-";
-        fen << " ";
-
-        if (bdst.state.has_ep_pawn) {
-            if (bdst.state.white_move)  fen << uci_squares[SquareOf(bdst.ep_target << 8)];
-            else                        fen << uci_squares[SquareOf(bdst.ep_target >> 8)];
-        }
-        else fen << "-";
-
-        fen << " 0 1";
-        return fen.str();
+        return std::string(pos);
     }
+    PositionToTemplate(moves, std::string, std::istringstream*)
 
-    char promochar[4] = {'r', 'n', 'b', 'q'};
 
-    static std::string uci_pv(const Boardstate::Board& board, Boardstate::State& state, const Bit ep_target, u8 full_depth){
-        u64 hash = board.hash;
-        u32 key = hash & Search::TT::key_mask;
+    template<Color c>
+    static std::string uci_pv(Position<c> pos){
+        u32 key = *pos.hash;
         Move mov = Search::TT::table[key].move;
-        std::stringstream output;
-        auto* bdst = new boardstate{board, state, ep_target};
-        int counter = 0;
 
-        while (Search::TT::table[key].hash == hash && counter < (full_depth + 4) && Mfrom(mov) != Mto(mov)){
-            counter++;
-            output << " " << uci_move(mov);
-            bdst = new boardstate{noInfo_move(*bdst, Mfrom(mov), Mto(mov), promochar[((mov >> 6) & 0b111) - 1])};
-            hash = bdst->board.hash;
-            key = hash & Search::TT::key_mask;
-            mov = Search::TT::table[key].move;
-        }
-        return output.str();
+        if (Search::TT::table[key].hash == pos.hash && Mfrom(mov) != Mto(mov))
+            return uci_move(mov) + standaloneMoves(pos, Mfrom(mov), Mto(mov), getPromo(mov));
+        return "";
     }
 
     static std::string uci_eval(Value val){

@@ -1,7 +1,6 @@
 #pragma once
 
 namespace ZeroLogic::Perft {
-    using namespace Boardstate;
     using namespace Movegen;
 
     class Callback {
@@ -11,6 +10,7 @@ namespace ZeroLogic::Perft {
         static inline u32 tt_hits;
         static inline std::chrono::steady_clock::time_point start_time;
         static inline bool depth1;
+        static inline bool test;
         static inline u64 overall_nodecount;
         static inline u8 full_depth;
 
@@ -27,29 +27,29 @@ namespace ZeroLogic::Perft {
             start_time = std::chrono::steady_clock::now();
         }
 
-        static FORCEINLINE void count(map moves, u64& partial_nodecount){
+        static inline void count(map moves, u64& partial_nodecount){
             partial_nodecount += BitCount(moves);
         }
-        static FORCEINLINE void count_promo(map moves, u64& partial_nodecount){
+        static inline void count_promo(map moves, u64& partial_nodecount){
             partial_nodecount += 4*BitCount(moves);
         }
-        static FORCEINLINE void increment(u64& partial_nodecount){
+        static inline void increment(u64& partial_nodecount){
             ++partial_nodecount;
         }
 
-        template<Piece promotion_to>
-        static FORCEINLINE void display_move_stats(Bit from, Bit to, u64& partial_nodecount){
+        template<Piece promotion_to = PIECE_NONE>
+        static inline void display_move_stats(Bit from, Bit to, u64& partial_nodecount){
             if (depth1) partial_nodecount = 1;
             overall_nodecount += partial_nodecount;
-            std::cout << Misc::_uci_move<promotion_to>(SquareOf(from), SquareOf(to)) << ": " << partial_nodecount << std::endl;
+            if (!test) std::cout << Misc::_uci_move<promotion_to>(SquareOf(from), SquareOf(to)) << ": " << Misc::format(partial_nodecount) << std::endl;
             partial_nodecount = 0;
         }
 
         template<CastleType type>
-        static FORCEINLINE void display_move_stats(u64& partial_nodecount){
+        static inline void display_move_stats(u64& partial_nodecount){
             if (depth1) partial_nodecount = 1;
             overall_nodecount += partial_nodecount;
-            std::cout << Misc::_uci_move<type>() << ": " << partial_nodecount << std::endl;
+            if (!test) std::cout << Misc::_uci_move<type>() << ": " << Misc::format(partial_nodecount) << std::endl;
             partial_nodecount = 0;
         }
 
@@ -60,235 +60,222 @@ namespace ZeroLogic::Perft {
             double sPmn = double(duration_mys) / double(overall_nodecount);
 
             std::cout << std::endl;
-            std::cout << "Overall nodes: "              << overall_nodecount                         << std::endl;
-            std::cout << "Time taken: "                 << duration_ms                               << std::endl;
-            std::cout << "Mn/s: "                       << overall_nodecount / duration_mys          << std::endl;
-            std::cout << "s/Mn: "                       << sPmn                                      << std::endl;
-            std::cout << "light distance equivalent: "  << 299792458 * 10e-7 * sPmn << " meters"     << std::endl;
-            std::cout << "tt hits: "                    << tt_hits                                   << std::endl;
+            std::cout << "Overall nodes: "              << Misc::format(overall_nodecount)        << "\n";
+            std::cout << "Time taken: "                 << duration_ms                               << "\n";
+            std::cout << "Mn/s: "                       << overall_nodecount / duration_mys          << "\n";
+            std::cout << "s/Mn: "                       << sPmn                                      << "\n";
+            std::cout << "light distance equivalent: "  << 299792458 * 10e-7 * sPmn << " meters"     << "\n";
+            std::cout << "tt hits: "                    << Misc::format(tt_hits)                  << "\n";
             std::cout << std::endl;
         }
 
-#define ep_hash ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(ep_target) % 8)]
-
-        template <State new_state, bool Nep_target>
-        static void _any_move(const Board& new_board, const u8& depth, u64& partial_nodecount, Bit new_ep_target){
-            u32 key = new_board.hash & TT::key_mask;
-            if ((TT::table[key].hash == new_board.hash) && (TT::table[key].depth == depth)){
+        template <Color c>
+        static void _any_move(Position<c>& npos, const u8& depth, u64& partial_nodecount){
+            u32 key = *npos.hash;
+            if (TT::table[key].hash == npos.hash && TT::table[key].depth == depth)
+            {
                 partial_nodecount += TT::table[key].nodecount;
                 ++tt_hits;
             }
-            else {
+            else
+            {
                 u64 new_partial_nodecount{0};
                 u8 new_depth{u8(depth + 1)};
-                if constexpr (Nep_target)
-                    if (new_depth == full_depth)    enumerate<new_state, false, true, Callback>(new_board, new_ep_target, new_depth, new_partial_nodecount);
-                    else                            enumerate<new_state, false, false, Callback>(new_board, new_ep_target, new_depth, new_partial_nodecount);
-                else {
-                    Bit nep = 0;
-                    if (new_depth == full_depth)    enumerate<new_state, false, true, Callback>(new_board, nep, new_depth, new_partial_nodecount);
-                    else                            enumerate<new_state, false, false, Callback>(new_board, nep, new_depth, new_partial_nodecount);
-                }
+                if (new_depth == full_depth)    enumerate<Callback, true>(npos, new_depth, new_partial_nodecount);
+                else                            enumerate<Callback>(npos, new_depth, new_partial_nodecount);
+
                 partial_nodecount += new_partial_nodecount;
-                if (depth < TT::table[key].depth) TT::table[key] = {new_board.hash, u32(new_partial_nodecount), depth};
+                if (depth < TT::table[key].depth) TT::table[key] = {npos.hash, u32(new_partial_nodecount), depth};
             }
         }
 
-        template<State state, bool capture, bool root>
-        static FORCEINLINE void _kingmove(const Board& board, Bit& from, Bit to, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            const Board new_board = move<KING, state.white_move, capture, state.has_ep_pawn, PIECE_INVALID>(board, from, to, ep_hash);
-            _any_move<state.no_castles(), false>(new_board, depth, partial_nodecount, 0);
-            if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, partial_nodecount);
+        template<bool root, Color c>
+        static inline void _kingmove(Position<c>& pos, Bit to, const u8& depth, u64& partial_nodecount){
+            Position<!c> npos = pos.template move_silent<KING>(pos.oKing, to);
+            _any_move(npos, depth, partial_nodecount);
+            if constexpr (root) display_move_stats(pos.oKing, to, partial_nodecount);
         }
 
-        template<State state, CastleType type, bool root>
-        static FORCEINLINE void _castlemove(const Board& board, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            const Board new_board = castle_move<type, state.has_ep_pawn>(board, ep_hash);
-            _any_move<state.no_castles(), false>(new_board, depth, partial_nodecount, 0);
-            if constexpr (root) display_move_stats<type>(partial_nodecount);
+        template<CastleType ct, bool root, Color c>
+        static inline void _castlemove(Position<c>& pos, const u8& depth, u64& partial_nodecount){
+            Position<!c> npos = pos.template move_castles<ct>();
+            _any_move(npos, depth, partial_nodecount);
+            if constexpr (root) display_move_stats<(c >> ct)>(partial_nodecount);
         }
 
-        template<State state, bool capture, Piece piece, bool root>
-        static FORCEINLINE void _silent_move(const Board& board, Bit from, Bit to, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            const Board new_board = move<piece, state.white_move, capture, state.has_ep_pawn, PIECE_INVALID>(board, from, to, ep_hash);
-            _any_move<state.silent_move(), false>(new_board, depth, partial_nodecount, 0);
-            if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, partial_nodecount);
+        template<Piece piece, bool root, Color c>
+        static inline void _silent_move(Position<c>& pos, Bit from, Bit to, const u8& depth, u64& partial_nodecount){
+            Position<!c> npos = pos.template move_silent<piece>(from, to);
+            _any_move(npos, depth, partial_nodecount);
+            if constexpr (root) display_move_stats(from, to, partial_nodecount);
         }
 
-        template<State state, bool capture, bool root>
-        static FORCEINLINE void _rookmove(const Board& board, Bit from, Bit to, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            constexpr bool us = state.white_move;
-            const Board new_board = move<ROOK, us, capture, state.has_ep_pawn, PIECE_INVALID>(board, from, to, ep_hash);
-            [&]() {
-                if constexpr (state.can_oo<us>()) {
-                    if (state.is_rook_right<us>(from)) {
-                        _any_move<state.no_oo(), false>(new_board, depth, partial_nodecount, 0);
-                        return;
-                    }
-                }
-                else if constexpr (state.can_ooo<us>()) {
-                    if (state.is_rook_left<us>(from)) {
-                        _any_move<state.no_ooo(), false>(new_board, depth, partial_nodecount, 0);
-                        return;
-                    }
-                }
-                _any_move<state.silent_move(), false>(new_board, depth, partial_nodecount, 0);
-            }();
-            if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, partial_nodecount);
+        template<CastleType ct, Color c>
+        static inline bool isLoud(Position<c>& pos, Bit from)
+        {
+            return pos.cs[ct] && (from & pos.template rm<(c >> ct)>());
         }
 
-        template<State state, bool root>
-        static FORCEINLINE void _ep_move(const Board& board, Bit& from, Bit to, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            const Board new_board = Boardstate::ep_move<state.white_move>(board, from | to, ep_target);
-            _any_move<state.silent_move(), false>(new_board, depth, partial_nodecount, 0);
-            if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, partial_nodecount);
+        template<bool root, Color c>
+        static inline void _rookmove(Position<c>& pos, Bit from, Bit to, const u8& depth, u64& partial_nodecount){
+
+            if (isLoud<SHORT>(pos, from))
+            {
+                Position<!c> npos = pos.template move_loudRook<SHORT>(from, to);
+                _any_move(npos, depth, partial_nodecount);
+            }
+            else if (isLoud<LONG>(pos, from))
+            {
+                Position<!c> npos = pos.template move_loudRook<LONG>(from, to);
+                _any_move(npos, depth, partial_nodecount);
+            }
+            else
+            {
+                Position<!c> npos = pos.template move_silent<ROOK>(from, to);
+                _any_move(npos, depth, partial_nodecount);
+            }
+            if constexpr (root) display_move_stats(from, to, partial_nodecount);
         }
 
-        template<State state, bool root>
-        static FORCEINLINE void _pawn_push(const Board& board, Bit from, Bit to, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            map ephash = ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(to) % 8)];
-            if constexpr (state.has_ep_pawn) ephash ^= ZeroLogic::TT::keys[ZeroLogic::TT::ep0 + (SquareOf(ep_target) % 8)];
-            const Board new_board = move<PAWN, state.white_move, false, true, PIECE_INVALID>(board, from, to, ephash);
-            _any_move<state.new_ep_pawn(), true>(new_board, depth, partial_nodecount, to);
-            if constexpr (root) display_move_stats<PIECE_INVALID>(from, to, partial_nodecount);
+        template<bool root, Color c>
+        static inline void _ep_move(Position<c>& pos, Bit from, Bit to, const u8& depth, u64& partial_nodecount){
+            Position<!c> npos = pos.move_ep(from, to);
+            _any_move(npos, depth, partial_nodecount);
+            if constexpr (root) display_move_stats(from, to, partial_nodecount);
         }
 
-        template<State state, Piece promotion_to, bool capture, bool root>
-        static FORCEINLINE void _promotion_move(const Board& board, Bit& from, Bit& to, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            const Board new_board = move<PAWN, state.white_move, capture, state.has_ep_pawn, promotion_to>(board, from, to, ep_hash);
-            _any_move<state.silent_move(), false>(new_board, depth, partial_nodecount, 0);
-            if constexpr (root) display_move_stats<promotion_to>(from, to, partial_nodecount);
+        template<bool root, Color c>
+        static inline void _pawn_push(Position<c>& pos, Bit from, Bit to, const u8& depth, u64& partial_nodecount){
+            Position<!c> npos = pos.move_pp(from, to);
+            _any_move(npos, depth, partial_nodecount);
+            if constexpr (root) display_move_stats(from, to, partial_nodecount);
         }
 
-#undef ep_hash
+        template<bool root, Color c>
+        static inline void _promotion_move(Position<c>& pos, Bit from, Bit& to, const u8& depth, u64& partial_nodecount){
+            Position<!c> npos1 = pos.template move_silent<PAWN, QUEEN>(from, to);
+            Position<!c> npos2 = pos.template move_silent<PAWN, KNIGHT>(from, to);
+            Position<!c> npos3 = pos.template move_silent<PAWN, ROOK>(from, to);
+            Position<!c> npos4 = pos.template move_silent<PAWN, BISHOP>(from, to);
+            _any_move(npos1, depth, partial_nodecount);
+            if constexpr (root) display_move_stats<QUEEN>(from, to, partial_nodecount);
+            _any_move(npos2, depth, partial_nodecount);
+            if constexpr (root) display_move_stats<KNIGHT>(from, to, partial_nodecount);
+            _any_move(npos3, depth, partial_nodecount);
+            if constexpr (root) display_move_stats<ROOK>(from, to, partial_nodecount);
+            _any_move(npos4, depth, partial_nodecount);
+            if constexpr (root) display_move_stats<BISHOP>(from, to, partial_nodecount);
+        }
 
     public:
 
-        template<State state>
-        static void go(const Board& board, u8 depth, Bit ep_target){
+        template<bool istest = false, Color c>
+        requires (c != NONE)
+        static auto go(Position<c>& pos, u8 depth){
             init(depth);
             u64 nodecount = 0;
             u8 start_depth = 0;
-            enumerate<state, true, false, Callback>(board, ep_target, start_depth, nodecount);
+            test = istest;
+            enumerate<Callback, false, true>(pos, start_depth, nodecount);
+            if constexpr (istest) return overall_nodecount;
             display_info();
         }
 
-        template<State state, bool root, bool leaf>
-        static FORCEINLINE void kingmove(const Board& board, map& moves, map& captures, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            constexpr bool us = state.white_move;
-            if constexpr (leaf) count(moves | captures, partial_nodecount);
-            else {
-                Bit king = King<us>(board);
-                Bitloop(moves)
-                    _kingmove<state, false, root>(board, king, 1ull << SquareOf(moves), ep_target, depth, partial_nodecount);
-                Bitloop(captures)
-                    _kingmove<state, true, root>(board, king, 1ull << SquareOf(captures), ep_target, depth, partial_nodecount);
-            }
+        template<bool root, bool leaf, Color c>
+        static inline void kingmove(Position<c>& pos, map& moves, const u8& depth, u64& partial_nodecount){
+            if constexpr (leaf) count(moves, partial_nodecount);
+            else
+                while(moves)
+                {
+                    Bit to = PopBit(moves);
+                    _kingmove<root>(pos, to, depth, partial_nodecount);
+                }
         }
 
-        template<State state, bool root, bool leaf>
-        static FORCEINLINE void ep_move(const Board& board, Bit& lep, Bit& rep, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            constexpr bool us = state.white_move;
-            if constexpr (leaf) {
+        template<bool root, bool leaf, Color c>
+        static inline void ep_move(Position<c>& pos, Bit& lep, Bit& rep, const u8& depth, u64& partial_nodecount){
+            if constexpr (leaf)
+            {
                 if (lep) increment(partial_nodecount);
                 if (rep) increment(partial_nodecount);
             }
-            else {
-                if (lep) _ep_move<state, root>(board, lep, pawn_atk_left<us>(lep), ep_target, depth, partial_nodecount);
-                if (rep) _ep_move<state, root>(board, rep, pawn_atk_right<us>(rep), ep_target, depth, partial_nodecount);
+            else
+            {
+                if (lep) _ep_move<root>(pos, lep, moveP<c, LEFT>(lep), depth, partial_nodecount);
+                if (rep) _ep_move<root>(pos, rep, moveP<c, RIGHT>(rep), depth, partial_nodecount);
             }
         }
 
-        template<State state, bool root, bool leaf>
-        static FORCEINLINE void pawn_move(const Board& board, map& pr, map& pl, map& pr_promo, map& pl_promo, map& pf, map& pp, map& pf_promo, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            if constexpr (leaf){
-                count(pr, partial_nodecount);
+        template<bool root, bool leaf, Color c>
+        static inline void pawn_move(
+                Position<c>& pos,
+                map& pr, map& pl, map& pr_promo, map& pl_promo, map& pf, map& pp, map& pf_promo,
+                const u8& depth, u64& partial_nodecount
+                )
+        {
+            if constexpr (leaf)
+            {
+                count(pr | pf | pp, partial_nodecount);
                 count(pl, partial_nodecount);
-                count_promo(pr_promo, partial_nodecount);
+                count_promo(pr_promo | pf_promo, partial_nodecount);
                 count_promo(pl_promo, partial_nodecount);
-                count(pf | pp, partial_nodecount);
-                count_promo(pf_promo, partial_nodecount);
             }
-            else{
-                constexpr bool us = state.white_move;
-                Bitloop(pr){
-                    Square sq = SquareOf(pr);
-                    _silent_move<state, true, PAWN, root>(board, 1ull << (sq + pawn_shift[0][us]), 1ull << sq, ep_target, depth, partial_nodecount);
+            else
+            {
+                while(pr){
+                    Bit to = PopBit(pr);
+                    _silent_move<PAWN, root>(pos, moveP<!c, RIGHT>(to), to, depth, partial_nodecount);
                 }
-                Bitloop(pl){
-                    Square sq = SquareOf(pl);
-                    _silent_move<state, true, PAWN, root>(board, 1ull << (sq + pawn_shift[1][us]), 1ull << sq, ep_target, depth, partial_nodecount);
+                while(pl){
+                    Bit to = PopBit(pl);
+                    _silent_move<PAWN, root>(pos, moveP<!c, LEFT>(to), to, depth, partial_nodecount);
                 }
-                Bitloop(pr_promo){
-                    Square sq = SquareOf(pr_promo); Bit from = 1ull << (sq + pawn_shift[0][us]), to = 1ull << sq;
-                    _promotion_move<state, QUEEN, true, root>(board, from, to, ep_target, depth, partial_nodecount);
-                    _promotion_move<state, ROOK, true, root>(board, from, to, ep_target, depth, partial_nodecount);
-                    _promotion_move<state, BISHOP, true, root>(board, from, to, ep_target, depth, partial_nodecount);
-                    _promotion_move<state, KNIGHT, true, root>(board, from, to, ep_target, depth, partial_nodecount);
+                while(pr_promo){
+                    Bit to = PopBit(pr_promo);
+                    _promotion_move<root>(pos, moveP<!c, RIGHT>(to), to, depth, partial_nodecount);
                 }
-                Bitloop(pl_promo){
-                    Square sq = SquareOf(pl_promo); Bit from = 1ull << (sq + pawn_shift[1][us]), to = 1ull << sq;
-                    _promotion_move<state, QUEEN, true, root>(board, from, to, ep_target, depth, partial_nodecount);
-                    _promotion_move<state, ROOK, true, root>(board, from, to, ep_target, depth, partial_nodecount);
-                    _promotion_move<state, BISHOP, true, root>(board, from, to, ep_target, depth, partial_nodecount);
-                    _promotion_move<state, KNIGHT, true, root>(board, from, to, ep_target, depth, partial_nodecount);
+                while(pl_promo){
+                    Bit to = PopBit(pl_promo);
+                    _promotion_move<root>(pos, moveP<!c, LEFT>(to), to, depth, partial_nodecount);
                 }
-                Bitloop(pf){
-                    Square sq = SquareOf(pf);
-                    _silent_move<state, false, PAWN, root>(board, 1ull << (sq + sign<us>(-8)), 1ull << sq, ep_target, depth, partial_nodecount);
+                while(pf){
+                    Bit to = PopBit(pf);
+                    _silent_move<PAWN, root>(pos, moveP<!c, FORWARD>(to), to, depth, partial_nodecount);
                 }
-                Bitloop(pf_promo){
-                    Square sq = SquareOf(pf_promo); Bit from = 1ull << (sq + sign<us>(-8)), to = 1ull << sq;
-                    _promotion_move<state, QUEEN, false, root>(board, from, to, ep_target, depth, partial_nodecount);
-                    _promotion_move<state, ROOK, false, root>(board, from, to, ep_target, depth, partial_nodecount);
-                    _promotion_move<state, BISHOP, false, root>(board, from, to, ep_target, depth, partial_nodecount);
-                    _promotion_move<state, KNIGHT, false, root>(board, from, to, ep_target, depth, partial_nodecount);
+                while(pf_promo){
+                    Bit to = PopBit(pf_promo);
+                    _promotion_move<root>(pos, moveP<!c, FORWARD>(to), to, depth, partial_nodecount);
                 }
-                Bitloop(pp){
-                    Square sq = SquareOf(pp);
-                    _pawn_push<state, root>(board, 1ull << (sq + sign<us>(-16)), 1ull << sq, ep_target, depth, partial_nodecount);
+                while(pp){
+                    Bit to = PopBit(pp);
+                    _pawn_push<root>(pos, move<(!c >> FORWARD), 2>(to), to, depth, partial_nodecount);
                 }
             }
         }
 
-        template<State state, Piece piece, bool root, bool leaf>
-        static FORCEINLINE void silent_move(const Board& board, map& moves, map& captures, const Square& sq, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            if constexpr (leaf)
-                count(moves | captures, partial_nodecount);
-            else{
-                Bitloop(moves)
-                    _silent_move<state, false, piece, root>(board, 1ull << sq, 1ull << SquareOf(moves), ep_target, depth, partial_nodecount);
-                Bitloop(captures)
-                    _silent_move<state, true, piece, root>(board, 1ull << sq, 1ull << SquareOf(captures), ep_target, depth, partial_nodecount);
-
-            }
+        template<Piece piece, bool root, bool leaf, Color c>
+        static inline void silent_move(Position<c>& pos, map& moves, Bit from, const u8& depth, u64& partial_nodecount){
+            if constexpr (leaf) count(moves, partial_nodecount);
+            else
+                while(moves)
+                {
+                    _silent_move<piece, root>(pos, from, PopBit(moves), depth, partial_nodecount);
+                }
         }
-        template<State state, bool root, bool leaf>
-        static FORCEINLINE void rookmove(const Board& board, map& moves, map& captures, const Square& sq, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
-            if constexpr (leaf)
-                count(moves | captures, partial_nodecount);
-            else{
-                Bitloop(moves)
-                    _rookmove<state, false, root>(board, 1ull << sq, 1ull << SquareOf(moves), ep_target, depth, partial_nodecount);
-                Bitloop(captures)
-                    _rookmove<state, true, root>(board, 1ull << sq, 1ull << SquareOf(captures), ep_target, depth, partial_nodecount);
-
-            }
+        template<bool root, bool leaf, Color c>
+        static inline void rookmove(Position<c>& pos, map& moves, Bit& from, const u8& depth, u64& partial_nodecount){
+            if constexpr (leaf) count(moves, partial_nodecount);
+            else
+                while(moves)
+                {
+                    _rookmove<root>(pos, from, PopBit(moves), depth, partial_nodecount);
+                }
         }
 
-        template<State state, bool left, bool root, bool leaf>
-        static FORCEINLINE void castlemove(const Board& board, const Bit& ep_target, const u8& depth, u64& partial_nodecount){
+        template<CastleType ct, bool root, bool leaf, Color c>
+        static inline void castlemove(Position<c>& pos, const u8& depth, u64& partial_nodecount){
             if constexpr (leaf) increment(partial_nodecount);
-            else {
-                if constexpr (left) {
-                    if constexpr (state.white_move) _castlemove<state, WHITE_OOO, root>(board, ep_target, depth, partial_nodecount);
-                    else                            _castlemove<state, BLACK_OOO, root>(board, ep_target, depth, partial_nodecount);
-                }
-                else {
-                    if constexpr (state.white_move) _castlemove<state, WHITE_OO, root>(board, ep_target, depth, partial_nodecount);
-                    else                            _castlemove<state, BLACK_OO, root>(board, ep_target, depth, partial_nodecount);
-                }
-            }
+            else _castlemove<ct, root>(pos, depth, partial_nodecount);
         }
     };
 }

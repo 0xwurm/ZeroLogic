@@ -1,68 +1,22 @@
 #pragma once
-#include "variables.h"
-#include <random>
 
-namespace ZeroLogic::TT {
-
-    /// @Description Array to store Zobrist keys
-    /// @Data One number per piece per square + four numbers for castling rights + one number for color to move + eight numbers for possible en passant.
-    ///       (Numbers are generated on calling 'init_keys')
-    /// @Access Get index for piece on square with 'get_key', castle rights and move color are accessed through the variables 'ws_key', 'wl_key', 'bs_key', 'bl_key', 'w_key',
-    ///         index for en passant: 'ep0' + file on which target is located
-    static u64 keys[781]{};
-
-    static u64 ws_key;
-    static u64 wl_key;
-    static u64 bs_key;
-    static u64 bl_key;
-    static u64 w_key;
-    static int ep0 = 773;
-
-    static void init_keys() {
-        std::mt19937_64 rand{3141592653589793238ull};
-        for (u64 &key: keys)
-            key = rand();
-        ws_key = keys[769];
-        wl_key = keys[770];
-        bs_key = keys[771];
-        bl_key = keys[772];
-        w_key = keys[780];
-    }
-
-    template<Piece p, bool white>
-    static FORCEINLINE u64 get_key(Square sq) {
-        if constexpr (white) {
-            if constexpr (p == PAWN) return keys[sq];
-            else if constexpr (p == BISHOP) return keys[64 + sq];
-            else if constexpr (p == KNIGHT) return keys[128 + sq];
-            else if constexpr (p == ROOK) return keys[192 + sq];
-            else if constexpr (p == QUEEN) return keys[256 + sq];
-            else if constexpr (p == KING) return keys[320 + sq];
-        } else {
-            if constexpr (p == PAWN) return keys[384 + sq];
-            else if constexpr (p == BISHOP) return keys[448 + sq];
-            else if constexpr (p == KNIGHT) return keys[512 + sq];
-            else if constexpr (p == ROOK) return keys[576 + sq];
-            else if constexpr (p == QUEEN) return keys[640 + sq];
-            else if constexpr (p == KING) return keys[704 + sq];
-        }
-    }
+namespace ZeroLogic {
+    static u32 key_mask = 0x3ffffff;
 }
 
-#include "gamestate.h"
+#include "hash.h"
 
 namespace ZeroLogic::Perft::TT{
 
     struct entry{
-        u64 hash{};
+        Hash hash{0};
         u32 nodecount{};
         u8 depth{};
     };
 
-    static u32 key_mask = 0x3ffffff;
     static entry* table;
 
-    static void init(u32 size){
+    static void init(u32 size = key_mask){
         table = (entry*) calloc(size, sizeof(entry));
         for (u32 s = 0; s <= size; s++)
             table[s].depth = 0xff;
@@ -73,7 +27,8 @@ namespace ZeroLogic::Perft::TT{
     }
 
 }
-namespace ZeroLogic::Search::TT{
+
+namespace ZeroLogic::Search::TT {
 
     // move encoding:
     // 111111  (6) - to
@@ -86,16 +41,14 @@ namespace ZeroLogic::Search::TT{
     // 0011 - bishop promotion
     // 0100 - queen promotion
 
-    static u32 key_mask = 0x3ffffff;
-
     struct entry{
-        u64 hash{};
+        Hash hash{0};
         Move move{};
         u8 depth{};
     };
     static entry* table;
 
-    static void init(u32 size){
+    static void init(u32 size = key_mask){
         table = (entry*) calloc(size, sizeof(entry));
         key_mask = size;
     }
@@ -103,12 +56,9 @@ namespace ZeroLogic::Search::TT{
         free(table);
     }
 
-    FORCEINLINE static u32 get_key(const Boardstate::Board& board){
-        return board.hash & key_mask;
-    }
-    FORCEINLINE static void replace(entry entry){
-        if (entry.depth >= table[entry.hash & key_mask].depth && entry.move)
-            table[entry.hash & key_mask] = entry;
+    inline static void replace(entry entry){
+        if (entry.depth >= table[*entry.hash].depth && entry.move)
+            table[*entry.hash] = entry;
     }
 
 }
@@ -383,17 +333,17 @@ namespace ZeroLogic::Lookup{
             }
         }
 
-    static FORCEINLINE map r_atk(const Square& index, map occ){
+    static inline map r_atk(const Square& index, map occ){
         return *(r_info[index].ptr + PEXT(occ, r_info[index].mask));
     }
-    static FORCEINLINE map r_xray(const Square& index, const map& occ){
+    static inline map r_xray(const Square& index, const map& occ){
         map attacked = r_atk(index, occ);
         return attacked ^ r_atk(index, (attacked & occ) ^ occ);
     }
-    static FORCEINLINE map b_atk(const Square& index, map occ){
+    static inline map b_atk(const Square& index, map occ){
         return *(b_info[index].ptr + PEXT(occ, b_info[index].mask));
     }
-    static FORCEINLINE map b_xray(const Square& index, const map& occ){
+    static inline map b_xray(const Square& index, const map& occ){
         map attacked = b_atk(index, occ);
         return attacked ^ b_atk(index, (attacked & occ) ^ occ);
     }

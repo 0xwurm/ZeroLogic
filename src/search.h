@@ -9,7 +9,7 @@ namespace ZeroLogic::Search {
     static inline u8 seldepth;
     static inline u8 full_depth;
 
-#ifdef NOT_CALCULATOR
+#ifdef USE_INTRIN
     static inline std::chrono::steady_clock::time_point start_time;
 #endif
 
@@ -34,10 +34,10 @@ namespace ZeroLogic::Search {
     };
 
     template<State state>
-    static Value qsearch(const Board& board, Bit ep_target, Value alpha, Value beta);
+    static Value qsearch(const TempPos& board, Bit ep_target, Value alpha, Value beta);
 
     template <State state>
-    static Value search(const Board& board, Bit ep_target, const u8 depth, Value alpha, Value beta){
+    static Value search(const TempPos& board, Bit ep_target, const u8 depth, Value alpha, Value beta){
         if (!depth)
             return qsearch<state>(board, ep_target, alpha, beta);
         ++nodecount;
@@ -64,19 +64,19 @@ namespace ZeroLogic::Search {
             }
         }
 
-        TT::replace({board.hash, bestmove, depth});
+        TT::replace({board.getHash(), bestmove, depth});
         return alpha;
     }
 
     template<State state>
-    static Value qsearch(const Board& board, Bit ep_target, Value alpha, Value beta){
+    static Value qsearch(const TempPos& board, Bit ep_target, Value alpha, Value beta){
         ++nodecount;
         Movelist ml;
         // we only enumerate captures and queen promotions (unless we are in check)
         bool check = enumerate<state, QSearch, Callback>(board, ep_target, 0, ml.end); // in case of quick pruning a lot of time is wasted on mg
 
         if (!check) {
-            const Value stand_pat = Evaluation::evaluate<state.white_move>(board);
+            const Value stand_pat = Evaluation::evaluate<state.active_color>(board);
             if (stand_pat >= beta || stand_pat + 2*QUEEN_MG < alpha) return stand_pat; // quick pruning
             if (stand_pat > alpha) alpha = stand_pat;
 
@@ -106,7 +106,7 @@ namespace ZeroLogic::Search {
         return alpha;
     }
 
-    static void display_info(const Board& board, State state, const Bit ep_target, Value evaluation) {
+    static void display_info(const TempPos& board, State state, const Bit ep_target, Value evaluation) {
 #ifdef USE_INTRIN
         auto duration = std::chrono::steady_clock::now() - start_time;
         auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
@@ -131,7 +131,7 @@ namespace ZeroLogic::Search {
     }
 
     template<State state>
-    static Value go_iteration(const Board& board, const Bit& ep_target, u8 depth, Value alpha, Value beta){
+    static Value go_iteration(const TempPos& board, const Bit& ep_target, u8 depth, Value alpha, Value beta){
         seldepth = 0;
         full_depth = depth;
 
@@ -139,7 +139,7 @@ namespace ZeroLogic::Search {
     }
 
     template<State state>
-    static void go(const Board& board, const Bit& ep_target, u8 depth){
+    static void go(const TempPos& board, const Bit& ep_target, u8 depth){
         nodecount = 0;
         tt_hits = 0;
 #ifdef USE_INTRIN
@@ -163,11 +163,11 @@ namespace ZeroLogic::Search {
             }
         }
 
-        std::cout << "bestmove " << Misc::uci_move(TT::table[board.hash & TT::key_mask].move) << std::endl;
+        std::cout << "bestmove " << Misc::uci_move(TT::table[board.getHash() & TT::key_mask].move) << std::endl;
     }
 
     template<State state>
-    static void go_single(const Board& board, const Bit& ep_target, u8 depth){
+    static void go_single(const TempPos& board, const Bit& ep_target, u8 depth){
         nodecount = 0;
         tt_hits = 0;
 #ifdef USE_INTRIN
