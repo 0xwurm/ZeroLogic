@@ -1,32 +1,8 @@
 #pragma once
 
 namespace ZeroLogic::Search {
-    using namespace Boardstate;
+
     using namespace Movegen;
-
-    template<Color c>
-    FORCEINLINE bool is_check(const TempPos &board) {
-        constexpr Color us = c;
-        constexpr Color enemy = !us;
-
-        const map king = board.king<us>();
-        const Square king_square = SquareOf(king);
-
-        map check_by_knight = Lookup::knight[king_square] & board.knights<enemy>();
-        if (check_by_knight) return true;
-
-        const map pr = Movegen::pawn_atk_right<enemy>(board.pawns<enemy>());
-        const map pl = Movegen::pawn_atk_left<enemy>(board.pawns<enemy>());
-        if ((pr | pl) & king) return true;
-
-        map atkR = Lookup::r_atk(king_square, board.allPieces()) & board.straightSliders<enemy>();
-        if (atkR) return true;
-        map atkB = Lookup::b_atk(king_square, board.allPieces()) & board.diagonalSliders<enemy>();
-        if (atkB) return true;
-
-        return false;
-    }
-
 
     class Static {
 
@@ -35,68 +11,69 @@ namespace ZeroLogic::Search {
 
             static constexpr Value piece_val_table[6] = {PAWN_MG, ROOK_MG, KNIGHT_MG, BISHOP_MG, QUEEN_MG, Wkgn};
             template<Color c>
-            static FORCEINLINE Value captured_piece_val(const TempPos &board) {
-                if (exchange_square & board.pawns<!c>())      return piece_val_table[PAWN];
-                if (exchange_square & board.bishops<!c>())    return piece_val_table[BISHOP];
-                if (exchange_square & board.knights<!c>())    return piece_val_table[KNIGHT];
-                if (exchange_square & board.rooks<!c>())      return piece_val_table[ROOK];
-                if (exchange_square & board.queens<!c>())     return piece_val_table[QUEEN];
+            static inline Value captured_piece_val(Position<c>& pos) {
+                if (exchange_square & pos.ePawns)   return piece_val_table[PAWN];
+                if (exchange_square & pos.eBishops) return piece_val_table[BISHOP];
+                if (exchange_square & pos.eKnights) return piece_val_table[KNIGHT];
+                if (exchange_square & pos.eRooks)   return piece_val_table[ROOK];
+                if (exchange_square & pos.eQueens)  return piece_val_table[QUEEN];
                 return piece_val_table[KING];
             }
 
-            template<Color c, Piece piece, bool promotion>
-            static int _see(const TempPos& board, const Bit from) {
-                Value pval = captured_piece_val<c>(board);
-                if constexpr (promotion) pval += (QUEEN_MG - PAWN_MG);
-                const TempPos new_board = board.see_move<c, piece, promotion>(from, exchange_square);
-                return std::max(0, int(pval - see<!c>(new_board)));
+            template<Piece p, bool promo = false, Color c>
+            static int _see(Position<c>& pos, const Bit from) {
+                Value pval = captured_piece_val(pos);
+                if constexpr (promo) pval += (QUEEN_MG - PAWN_MG);
+                Position<!c> npos = pos.template move_silent<p, promo ? QUEEN : PIECE_NONE, true>(from, exchange_square);
+                return std::max(0, int(pval - see<!c>(npos)));
             }
 
+            // trash
             template<Color c>
-            static FORCEINLINE int see(const TempPos &board) {
+            static inline int see(Position<c>& pos) {
 
                 // pawns
-                if (pawn_atk_left<!c>(exchange_square) & board.pawns<c>()){
-                    if (exchange_square & last_rank<c>())   return _see<c, PAWN, true>(board, 1ull << (to + pawn_shift[0][c]));
-                    else                                    return _see<c, PAWN, false>(board, 1ull << (to + pawn_shift[0][c]));
+                if (moveP<!c, LEFT>(exchange_square) & pos.oPawns){
+                    if (exchange_square & last_rank<c>())   return _see<PAWN, true>(pos, moveP<!c, LEFT>(exchange_square));
+                    else                                    return _see<PAWN>(pos, moveP<!c, LEFT>(exchange_square));
                 }
-                else if (pawn_atk_right<!c>(exchange_square) & board.pawns<c>()){
-                    if (exchange_square & last_rank<c>())   return _see<c, PAWN, true>(board, 1ull << (to + pawn_shift[1][c]));
-                    else                                    return _see<c, PAWN, false>(board, 1ull << (to + pawn_shift[1][c]));
+                else if (moveP<!c, RIGHT>(exchange_square) & pos.oPawns){
+                    if (exchange_square & last_rank<c>())   return _see<PAWN, true>(pos, moveP<!c, RIGHT>(exchange_square));
+                    else                                    return _see<PAWN>(pos, moveP<!c, RIGHT>(exchange_square));
                 }
 
 
                 // knights
-                else if (Lookup::knight[to] & board.knights<c>())
-                    return _see<c, KNIGHT, false>(board, 1ull << (SquareOf(board.knights<c>() & Lookup::knight[to])));
+                else if (Lookup::knight[to] & pos.oKnights)
+                    return _see<KNIGHT>(pos, BitOf(pos.oKnights & Lookup::knight[to]));
 
                 // bishops
-                else if (Lookup::b_atk(to, board.allPieces()) & board.bishops<c>())
-                    return _see<c, BISHOP, false>(board, 1ull << (SquareOf(board.bishops<c>() & Lookup::b_atk(to, board.allPieces()))));
+                else if (Lookup::b_atk(to, pos.Occ) & pos.oBishops)
+                    return _see<BISHOP>(pos, BitOf(pos.oBishops & Lookup::b_atk(to, pos.Occ)));
 
                 // rooks
-                else if (Lookup::r_atk(to, board.allPieces()) & board.rooks<c>())
-                    return _see<c, ROOK, false>(board, 1ull << (SquareOf(board.rooks<c>() & Lookup::r_atk(to, board.allPieces()))));
+                else if (Lookup::r_atk(to, pos.Occ) & pos.oRooks)
+                    return _see<ROOK>(pos, BitOf(pos.oRooks & Lookup::r_atk(to, pos.Occ)));
 
                 // queens
-                else if ((Lookup::r_atk(to, board.allPieces()) | Lookup::b_atk(to, board.allPieces())) & board.queens<c>())
-                    return _see<c, QUEEN, false>(board, 1ull << (SquareOf(board.queens<c>() & (Lookup::r_atk(to, board.allPieces()) | Lookup::b_atk(to, board.allPieces())))));
+                else if ((Lookup::r_atk(to, pos.Occ) | Lookup::b_atk(to, pos.Occ)) & pos.oQueens)
+                    return _see<QUEEN>(pos, BitOf(pos.oQueens & (Lookup::r_atk(to, pos.Occ) | Lookup::b_atk(to, pos.Occ))));
 
                 // king
-                else if (Lookup::king[to] & board.king<c>())
-                    return _see<c, KING, false>(board, 1ull << SquareOf(board.king<c>()));
+                else if (Lookup::king[to] & pos.oKing)
+                    return _see<KING>(pos, BitOf(pos.oKing));
 
                 return ZERO;
             }
 
-            template<Color c, Piece piece, bool promotion>
-            static FORCEINLINE Value SEE(const TempPos& board, const u8& tosq, const Bit& from, const Bit& exsq){
+            template<Piece p, bool promo, Color c>
+            static inline Value SEE(Position<c>& pos, const u8& tosq, const Bit& from, const Bit& exsq){
                 to = tosq;
                 exchange_square = exsq;
-                Value pval = captured_piece_val<c>(board);
-                if constexpr (promotion) pval += QUEEN_MG - PAWN_MG;
-                const TempPos new_board = board.see_move<c, piece, promotion>(from, exchange_square);
-                return pval - see<!c>(new_board);
+                Value pval = captured_piece_val<c>(pos);
+                if constexpr (promo) pval += QUEEN_MG - PAWN_MG;
+                Position<!c> npos = pos.template move_silent<p, promo ? QUEEN : PIECE_NONE>(from, exchange_square);
+                return pval - see<!c>(npos);
             }
 
         public:
@@ -106,15 +83,15 @@ namespace ZeroLogic::Search {
             // (qval - pval) - promotion without capture
             // SEE score - captures
             // -50 - non-captures
-            template<Color c, Piece piece, bool capture, bool promotion>
-            static FORCEINLINE Value rate(const TempPos &board, const u8& tosq, const Bit from, const Bit exsq, const Move& move) {
+            template<Piece piece = PIECE_NONE, bool promotion = false, Color c>
+            static inline Value rate(Position<c>& pos, const Move& move, const u8& tosq = 0, const Bit from = 0, const Bit exsq = 0) {
 
-                const u32 key = TT::get_key(board);
-                if (TT::table[key].hash == board.getHash() && TT::table[key].move == move) return HASHMOVE;
+                const u32 key = *pos.hash;
+                if (TT::table[key].hash == pos.hash && TT::table[key].move == move) return HASHMOVE;
 
-                if constexpr (capture) return SEE<c, piece, promotion>(board, tosq, from, exsq);
+                if (exsq & pos.enemy) return SEE<piece, promotion>(pos, tosq, from, exsq);
                 if constexpr (promotion) return QUEEN_MG - PAWN_MG;
-                return NON_CAPTURE; // psqt diff
+                return NON_CAPTURE; // TODO: psqt diff
             }
     };
 }

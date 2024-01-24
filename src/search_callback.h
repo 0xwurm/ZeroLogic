@@ -3,97 +3,100 @@
 #include "static.h"
 
 namespace ZeroLogic::Search {
-    using namespace Movegen;
 
+    template<Color c>
     struct RatedMove{
         Move move;
         Value static_rating;
-        Value (*Mcallback)(const TempPos&, const Bit, const u16, const u8, Value, Value);
+
+        Value (*callback)(Position<c>& pos, Move, const u8, Value, Value);
     };
 
     class Callback{
 
     private:
 
-        template<State state, SearchType st>
-        static Value Mcallback_pp(const TempPos&, Bit, Move, u8, Value, Value);
-        template<State state, Piece piece, bool capture, SearchType st>
-        static Value Mcallback_any(const TempPos&, Bit, Move, u8, Value, Value);
-        template<State state, Piece promoted, bool capture, SearchType st>
-        static Value Mcallback_promo(const TempPos&, Bit, Move, u8, Value, Value);
-        template<State state, SearchType st>
-        static Value Mcallback_ep(const TempPos&, Bit, Move, u8, Value, Value);
-        template<State state, CastleType ct>
-        static Value Mcallback_castles(const TempPos&, Bit, Move, u8, Value, Value);
+        template<Piece piece, SearchType st, Color c>
+        static Value silent_callback(Position<c>&, Move, u8, Value, Value);
+        template<SearchType st, Color c>
+        static Value pp_callback(Position<c>&, Move, u8, Value, Value);
+        template<SearchType st, Color c>
+        static Value ep_callback(Position<c>&, Move, u8, Value, Value);
+        template<Piece promoted, SearchType st, Color c>
+        static Value promo_callback(Position<c>&, Move, u8, Value, Value);
+        template<CastleType ct, Color c>
+        static Value castles_callback(Position<c>&, Move, u8, Value, Value);
 
-        template<State state, Piece piece, bool capture, SearchType st>
-        static FORCEINLINE void handle_move(const TempPos&, u16, u16, RatedMove*&);
-        template<State state, SearchType st>
-        static FORCEINLINE void handle_pp(const TempPos&, u16, u16, RatedMove*&);
-        template<State state, SearchType st>
-        static FORCEINLINE void handle_ep(const TempPos&, u16, u16, RatedMove*&);
-        template<State state, bool capture, SearchType st>
-        static FORCEINLINE void handle_promotion(const TempPos&, u16, u16, RatedMove*&);
-        template<State state, CastleType ct>
-        static FORCEINLINE void handle_castles(const TempPos&, RatedMove*&);
+        template<Piece piece, SearchType st, Color c>
+        static inline void _silent_move(Position<c>&, u16, u16, RatedMove<c>*&);
+        template<SearchType st, Color c>
+        static inline void _pawn_push(Position<c>&, u16, u16, RatedMove<c>*&);
+        template<SearchType st, Color c>
+        static inline void _ep_move(Position<c>&, u16, u16, RatedMove<c>*&);
+        template<SearchType st, Color c>
+        static inline void _promotion_move(Position<c>&, u16, u16, RatedMove<c>*&);
+        template<CastleType ct, Color c>
+        static inline void _castlemove(Position<c>&, RatedMove<c>*&);
 
     public:
 
-        using specific = RatedMove*;
+        template<Color c>
+        using specific = RatedMove<c>*;
 
-        template<State state, Piece piece, bool st, bool check>
-        static FORCEINLINE void silent_move(const TempPos& board, map& moves, map& captures, const Square& from, const Bit& ep_target, const u8& depth, RatedMove*& movelist){
-            if constexpr (st == NSearch || check) {
-                Bitloop(moves) handle_move<state, piece, false, SearchType(st)>(board, SquareOf(moves), from, movelist);
+        template<Piece piece, bool st, bool check, Color c>
+        static inline void silent_move(Position<c>& pos, map& moves, Bit fromBit, const u8 depth, RatedMove<c>*& movelist){
+            Square from = SquareOf(fromBit);
+            if constexpr (st == QSearch && !check) moves &= pos.enemy;
+            Bitloop(moves)
+            {
+                _silent_move<piece, SearchType(st)>(pos, SquareOf(moves), from, movelist);
             }
-            Bitloop(captures) handle_move<state, piece, true, SearchType(st)>(board, SquareOf(captures), from, movelist);
         }
 
-        template<State state, bool st, bool check>
-        static FORCEINLINE void ep_move(const TempPos& board, Bit& lep, Bit& rep, const Bit& ep_target, const u8& depth, RatedMove*& movelist){
-            if (st == QSearch && !check) return;
+        template<bool st, bool check, Color c>
+        static inline void ep_move(Position<c>& pos, Bit& lep, Bit& rep, const u8 depth, RatedMove<c>*& movelist){
+            if constexpr (st == QSearch && !check) return;
 
-            constexpr Color us = state.active_color;
-            if (lep) handle_ep<state, SearchType(st)>(board, SquareOf(pawn_atk_left<us>(lep)), SquareOf(lep), movelist);
-            if (rep) handle_ep<state, SearchType(st)>(board, SquareOf(pawn_atk_right<us>(rep)), SquareOf(rep), movelist);
+            if (lep) _ep_move<SearchType(st)>(pos, SquareOf((moveP<c, LEFT>(lep))), SquareOf(lep), movelist);
+            if (rep) _ep_move<SearchType(st)>(pos, SquareOf((moveP<c, RIGHT>(rep))), SquareOf(rep), movelist);
         }
 
-        template<State state, bool st, bool check>
-        static FORCEINLINE void pawn_move(const TempPos& board, map& pr, map& pl, map& pr_promo, map& pl_promo, map& pf, map& pp, map& pf_promo, const Bit& ep_target, const u8& depth, RatedMove*& movelist){
-            constexpr Color us = state.active_color;
+        template<bool st, bool check, Color c>
+        static inline void pawn_move(
+                Position<c>& pos,
+                map& pr, map& pl, map& pr_promo, map& pl_promo, map& pf, map& pp, map& pf_promo,
+                const u8 depth, RatedMove<c>*& movelist
+                )
+        {
             constexpr auto nst = SearchType(st);
-            Bitloop(pr) handle_move<state, PAWN, true, nst>(board, SquareOf(pr), SquareOf(pr) + pawn_shift[0][us], movelist);
-            Bitloop(pl) handle_move<state, PAWN, true, nst>(board, SquareOf(pl), SquareOf(pl) + pawn_shift[1][us], movelist);
-            if constexpr (nst == NSearch || check) {
-                Bitloop(pf) handle_move<state, PAWN, false, nst>(board, SquareOf(pf), SquareOf(pf) + sign<us>(-8),movelist);
-                Bitloop(pp) handle_pp<state, nst>(board, SquareOf(pp), SquareOf(pp) + sign<us>(-16), movelist);
+            Bitloop(pr) _silent_move<PAWN, nst>(pos, SquareOf(pr), SquareOf((moveP<!c, RIGHT>(pr))), movelist);
+            Bitloop(pl) _silent_move<PAWN, nst>(pos, SquareOf(pl), SquareOf((moveP<!c, LEFT>(pl))), movelist);
+
+            if constexpr (nst == NSearch || check)
+            {
+                Bitloop(pf) _silent_move<PAWN, nst>(pos, SquareOf(pf), SquareOf((moveP<!c, FORWARD>(pf))),movelist);
+                Bitloop(pp) _pawn_push<nst>(pos, SquareOf(pp), SquareOf((move<(c >> SOUTH), 2>(pp))), movelist);
             }
-            Bitloop(pr_promo) handle_promotion<state, true, nst>(board, SquareOf(pr_promo), SquareOf(pr_promo) + pawn_shift[0][us], movelist);
-            Bitloop(pl_promo) handle_promotion<state, true, nst>(board, SquareOf(pl_promo), SquareOf(pl_promo) + pawn_shift[1][us], movelist);
-            Bitloop(pf_promo) handle_promotion<state, false, nst>(board, SquareOf(pf_promo), SquareOf(pf_promo) + sign<us>(-8), movelist);
+
+            Bitloop(pr_promo) _promotion_move<nst>(pos, SquareOf(pr_promo), SquareOf((moveP<!c, RIGHT>(pr_promo))), movelist);
+            Bitloop(pl_promo) _promotion_move<nst>(pos, SquareOf(pl_promo), SquareOf((moveP<!c, LEFT>(pl_promo))), movelist);
+            Bitloop(pf_promo) _promotion_move<nst>(pos, SquareOf(pf_promo), SquareOf((moveP<!c, FORWARD>(pf_promo))), movelist);
         }
 
-        template<State state, bool left, bool st, bool check>
-        static FORCEINLINE void castlemove(const TempPos& board, const Bit& ep_target, const u8& depth, RatedMove*& movelist){
+        template<CastleType ct, bool st, bool check, Color c>
+        static inline void castlemove(Position<c>& pos, const u8& depth, RatedMove<c>*& movelist){
             if (st == QSearch) return;
 
-            if constexpr (left) {
-                if constexpr (state.active_color) handle_castles<state, WHITE_OOO>(board, movelist);
-                else                            handle_castles<state, BLACK_OOO>(board, movelist);
-            }
-            else {
-                if constexpr (state.active_color) handle_castles<state, WHITE_OO>(board, movelist);
-                else                            handle_castles<state, BLACK_OO>(board, movelist);
-            }
+            _castlemove<ct>(pos, movelist);
         }
 
-        template<State state, bool st, bool check>
-        static FORCEINLINE void rookmove(const TempPos& board, map& moves, map& captures, const Square& sq, const Bit& ep_target, const u8& depth, RatedMove*& movelist){
-            silent_move<state, ROOK, SearchType(st), check>(board, moves, captures, sq, ep_target, depth, movelist);
+        template<bool st, bool check, Color c>
+        static inline void rookmove(Position<c>& pos, map& moves, Bit& fromBit, const u8 depth, RatedMove<c>*& movelist){
+            silent_move<ROOK, st, check>(pos, moves, fromBit, depth, movelist);
         }
-        template<State state, bool st, bool check>
-        static FORCEINLINE void kingmove(const TempPos& board, map& moves, map& captures, const Bit& ep_target, const u8& depth, RatedMove*& movelist){
-            silent_move<state, KING, SearchType(st), check>(board, moves, captures, SquareOf(board.king<state.active_color>()), ep_target, depth, movelist);
+        template<bool st, bool check, Color c>
+        static inline void kingmove(Position<c>& pos, map& moves, const u8 depth, RatedMove<c>*& movelist){
+            silent_move<KING, st, check>(pos, moves, pos.oKing, depth, movelist);
         }
 
     };
@@ -102,118 +105,86 @@ namespace ZeroLogic::Search {
 #include "search.h"
 
 namespace ZeroLogic::Search{
-    using namespace Boardstate;
-    using namespace Movegen;
 
-#define ep_hash ::ZeroLogic::TT::keys[::ZeroLogic::TT::ep0 + (SquareOf(ep_target) % 8)]
-
-    template<State state, SearchType st>
-    Value Callback::Mcallback_pp(const TempPos& board, const Bit ep_target, const u16 enc, const u8 depth, Value Nalpha, Value Nbeta){
+    template<SearchType st, Color c>
+    Value Callback::pp_callback(Position<c>& pos, Move enc, const u8 depth, Value Nalpha, Value Nbeta){
         Bit from = 1ull << Misc::Mfrom(enc);
         Bit to = 1ull << Misc::Mto(enc);
-        map ephash = ::ZeroLogic::TT::keys[::ZeroLogic::TT::ep0 + (SquareOf(to) % 8)];
-        if constexpr (state.has_ep_pawn) ephash ^= ep_hash;
-        const TempPos new_board = board.move<PAWN, state.active_color, false, true, PIECE_INVALID>(from, to, ephash);
-        if constexpr (st == QSearch)    return -qsearch<state.new_ep_pawn()>(new_board, to, Nalpha, Nbeta);
-        else                            return -search<state.new_ep_pawn()>(new_board, to, depth - 1, Nalpha, Nbeta);
+        Position<!c> npos = pos.move_pp(from, to);
+        return -search<st>(npos, Nalpha, Nbeta, depth - 1);
     }
 
-    template<State state, Piece piece, bool capture, SearchType st>
-    Value Callback::Mcallback_any(const TempPos& board, const Bit ep_target, const u16 enc, const u8 depth, Value Nalpha, Value Nbeta){
-        constexpr Color us = state.active_color;
+    template<Piece p, SearchType st, Color c>
+    Value Callback::silent_callback(Position<c>& pos, Move enc, const u8 depth, Value Nalpha, Value Nbeta){
         Bit from = 1ull << Misc::Mfrom(enc);
         Bit to = 1ull << Misc::Mto(enc);
-        const TempPos new_board = board.move<piece, us, capture, state.has_ep_pawn, PIECE_INVALID>(from, to, ep_hash);
-
-
-        if constexpr (piece == KING) {
-            if constexpr (st == QSearch)    return -qsearch<state.no_castles()>(new_board, 0, Nalpha, Nbeta);
-            else                            return -search<state.no_castles()>(new_board, 0, depth - 1, Nalpha, Nbeta);
-        }
-
-        if constexpr (piece == ROOK){
-            if constexpr (state.can_oo<us>()) {
-                if (state.is_rook_right<us>(from)) {
-                    if constexpr (st == QSearch)    return -qsearch<state.no_oo()>(new_board, 0, Nalpha, Nbeta);
-                    else                            return -search<state.no_oo()>(new_board, 0, depth - 1, Nalpha, Nbeta);
-                }
-            }
-            else if constexpr (state.can_ooo<us>()) {
-                if (state.is_rook_left<us>(from)) {
-                    if constexpr (st == QSearch)    return -qsearch<state.no_ooo()>(new_board, 0, Nalpha, Nbeta);
-                    else                            return -search<state.no_ooo()>(new_board, 0, depth - 1, Nalpha, Nbeta);
-                }
-            }
-        }
-
-        if constexpr (st == QSearch)    return -qsearch<state.silent_move()>(new_board, 0, Nalpha, Nbeta);
-        else                            return -search<state.silent_move()>(new_board, 0, depth - 1, Nalpha, Nbeta);
+        Position<!c> npos = pos.template move_silent<p>(from, to);
+        return -search<st>(npos, Nalpha, Nbeta, depth - 1);
     }
 
-    template<State state, Piece promoted, bool capture, SearchType st>
-    Value Callback::Mcallback_promo(const TempPos& board, const Bit ep_target, const u16 enc, const u8 depth, Value Nalpha, Value Nbeta) {
+    template<Piece promo, SearchType st, Color c>
+    Value Callback::promo_callback(Position<c>& pos, Move enc, const u8 depth, Value Nalpha, Value Nbeta) {
         Bit from = 1ull << Misc::Mfrom(enc);
         Bit to = 1ull << Misc::Mto(enc);
-        const TempPos new_board = board.move<PAWN, state.active_color, capture, state.has_ep_pawn, promoted>(from, to, ep_hash);
-        if constexpr (st == QSearch)    return -qsearch<state.silent_move()>(new_board, 0, Nalpha, Nbeta);
-        else                            return -search<state.silent_move()>(new_board, 0, 0, Nalpha, Nbeta);
+        Position<!c> npos = pos.template move_silent<PAWN, promo>(from, to);
+        return -search<st>(npos, Nalpha, Nbeta, depth - 1);
     }
 
-    template<State state, SearchType st>
-    Value Callback::Mcallback_ep(const TempPos& board, const Bit ep_target, const u16 enc, const u8 depth, Value Nalpha, Value Nbeta){
+    template<SearchType st, Color c>
+    Value Callback::ep_callback(Position<c>& pos, Move enc, const u8 depth, Value Nalpha, Value Nbeta){
         Bit from = 1ull << Misc::Mfrom(enc);
         Bit to = 1ull << Misc::Mto(enc);
-        const TempPos new_board = board.ep_move<state.active_color>(from | to, ep_target);
-        if constexpr (st == QSearch)    return -qsearch<state.silent_move()>(new_board, 0, Nalpha, Nbeta);
-        else                            return -search<state.silent_move()>(new_board, 0, depth - 1, Nalpha, Nbeta);
+        Position<!c> npos = pos.move_ep(from, to);
+        return -search<st>(npos, Nalpha, Nbeta, depth - 1);
     }
 
-    template<State state, CastleType ct>
-    Value Callback::Mcallback_castles(const TempPos& board, const Bit ep_target, const u16 enc, const u8 depth, Value Nalpha, Value Nbeta){
-        const TempPos new_board = board.castle_move<ct, state.has_ep_pawn>(ep_hash);
-        return -search<state.no_castles()>(new_board, 0, depth - 1, Nalpha, Nbeta);
+    template<CastleType ct, Color c>
+    Value Callback::castles_callback(Position<c>& pos, Move enc, const u8 depth, Value Nalpha, Value Nbeta){
+        Position<!c> npos = pos.template move_castles<ct>();
+        return -search(npos, Nalpha, Nbeta, depth - 1);
     }
 
-#undef ep_hash
 
-
-    template<State state, Piece piece, bool capture, SearchType st>
-    FORCEINLINE void Callback::handle_move(const TempPos& board, const u16 to, const u16 from, RatedMove*& movelist){
-        const Move move = to << 10 | from;
-        const Value static_val = Static::rate<state.active_color, piece, capture, false>(board, u8(to), 1ull << from, 1ull << to, move);
-        *(movelist++) = {move, static_val, Mcallback_any<state, piece, capture, st>};
+    template<Piece p, SearchType st, Color c>
+    inline void Callback::_silent_move(Position<c>& pos, u16 to, u16 from, RatedMove<c>*& movelist){
+        Move move = to << 10 | from;
+        Value static_val = Static::rate<p>(pos, move, u8(to), 1ull << from, 1ull << to);
+        *(movelist++) = {move, static_val, silent_callback<p, st>};
     }
-    template<State state, SearchType st>
-    FORCEINLINE void Callback::handle_pp(const TempPos& board, const u16 to, const u16 from, RatedMove*& movelist){
-        const Move move = to << 10 | from;
-        const Value static_val = Static::rate<state.active_color, PAWN, false, false>(board, u8(to), 1ull << from, 1ull << to, move);
-        *(movelist++) = {move, static_val, Mcallback_pp<state, st>};
+    template<SearchType st, Color c>
+    inline void Callback::_pawn_push(Position<c>& pos, u16 to, u16 from, RatedMove<c>*& movelist) {
+        Move move = to << 10 | from;
+        Value static_val = Static::rate<PAWN>(pos, move, u8(to), 1ull << from, 1ull << to);
+        *(movelist++) = {move, static_val, pp_callback<st>};
     }
-    template<State state, SearchType st>
-    FORCEINLINE void Callback::handle_ep(const TempPos& board, const u16 to, const u16 from, RatedMove*& movelist){
-        const Move move = to << 10 | from;
-        const Value static_val = Static::rate<state.active_color, PAWN, false, false>(board, u8(to), 1ull << from, 1ull << to, move);
-        *(movelist++) = {move, static_val, Mcallback_ep<state, st>};
+    template<SearchType st, Color c>
+    inline void Callback::_ep_move(Position<c>& pos, u16 to, u16 from, RatedMove<c>*& movelist){
+        Move move = to << 10 | from;
+        Value static_val = Static::rate<PAWN>(pos, move, u8(to), 1ull << from, 1ull << to);
+        *(movelist++) = {move, static_val, ep_callback<st>};
     }
 
-    template<State state, bool capture, SearchType st>
-    FORCEINLINE void Callback::handle_promotion(const TempPos& board, const u16 to, const u16 from, RatedMove*& movelist){
-        const Move move = to << 10 | from;
-        const Value static_val = Static::rate<state.active_color, PAWN, capture, true>(board, u8(to), 1ull << from, 1ull << to, move);
-        *(movelist++) = {Move(move | (0b0100 << 6)), static_val, Mcallback_promo<state, QUEEN, capture, st>};
-        if constexpr (st == NSearch) {
-            *(movelist++) = {Move(move | (0b0010 << 6)), Value(-50), Mcallback_promo<state, KNIGHT, capture, NSearch>};
-            *(movelist++) = {Move(move | (0b0001 << 6)), Value(-50), Mcallback_promo<state, ROOK, capture, NSearch>};
-            *(movelist++) = {Move(move | (0b0011 << 6)), Value(-50), Mcallback_promo<state, BISHOP, capture, NSearch>};
+    template<SearchType st, Color c>
+    inline void Callback::_promotion_move(Position<c>& pos, u16 to, u16 from, RatedMove<c>*& movelist){
+        Move move = to << 10 | from;
+        Value static_val = Static::rate<PAWN, true>(pos, u8(to), move, 1ull << from, 1ull << to);
+        *(movelist++) = {QUEEN >> move, static_val, promo_callback<QUEEN, st>};
+
+        if constexpr (st == NSearch)
+        {
+            *(movelist++) = {KNIGHT >> move, NON_CAPTURE, promo_callback<KNIGHT, st>};
+            *(movelist++) = {ROOK >> move, NON_CAPTURE, promo_callback<ROOK, st>};
+            *(movelist++) = {BISHOP >> move, NON_CAPTURE, promo_callback<BISHOP, st>};
         }
     }
 
+    // wtf
     static constexpr Move castle_encodings[4] = {(1 << 10) | (0b1000 << 6) | 3, (5 << 10) | (0b1000 << 6) | 3, (57 << 10) | (0b1000 << 6) | 59,(61 << 10) | (0b1000 << 6) | 59};
-    template<State state, CastleType ct>
-    FORCEINLINE void Callback::handle_castles(const TempPos& board, RatedMove*& movelist){
-        const Move move = castle_encodings[ct];
-        const Value static_val = Static::rate<state.active_color, PIECE_INVALID, false, false>(board, 0, 0, 0, move);
-        *(movelist++) = {move, static_val, Mcallback_castles<state, ct>};
+    template<CastleType ct, Color c>
+    inline void Callback::_castlemove(Position<c>& pos, RatedMove<c>*& movelist){
+        Move move = castle_encodings[ct];
+        Value static_val = Static::rate(pos, move);
+        *(movelist++) = {move, static_val, castles_callback<ct>};
     }
 
 }

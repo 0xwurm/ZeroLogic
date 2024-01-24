@@ -2,12 +2,10 @@
 #include "position.h"
 #include "misc.h"
 #include "movegenerator.h"
-#ifdef USE_INTRIN
-#include <chrono>
-#endif
+#include <sys/time.h>
 // #include "search_callback.h"
-#include "perft_callback.h"
-#include "tests.h"
+// #include "perft_callback.h"
+// #include "tests.h"
 
 namespace ZeroLogic::UCI {
 
@@ -24,7 +22,6 @@ namespace ZeroLogic::UCI {
     // if 'moves' are specified it initializes a Position object to use its pre-existing, 'move' methods
     // and converts the Position that arises at the end of the sequence into a fen, which is then
     // returned to this function. We later use the fen to initialize the Position we will finally search.
-    // As usual this is due to our great friend, the template.
     static std::string position(std::istringstream& is){
 
         std::string token, fen;
@@ -39,7 +36,7 @@ namespace ZeroLogic::UCI {
         else if (token == "test")
         {
             is >> token;
-            fen = Test::perftTests[std::stoi(token) - 1].fen;
+            // fen = Test::perftTests[std::stoi(token) - 1].fen;
             is >> token;
         }
         else if (token == "fen")
@@ -61,7 +58,7 @@ namespace ZeroLogic::UCI {
         while (is >> token)
             value += (value.empty() ? "" : " ") + token;
 
-        if (name == "hashsize")
+        if (name == "Hash")
             hash_size = std::stoi(value);
     }
 
@@ -75,23 +72,23 @@ namespace ZeroLogic::UCI {
             if (token == "depth") {
                 *is >> token;
                 Search::TT::init(hash_size);
-                // Search::go<state>(board, ep_target, std::stoi(token));
+                // Search::go(pos, std::stoi(token));
                 Search::TT::clear();
             }
             else if (token == "perft") {
                 *is >> token;
                 Perft::TT::init(hash_size);
-                Perft::Callback::go(pos, std::stoi(token));
+                // Perft::Callback::go(pos, std::stoi(token));
                 Perft::TT::clear();
             }
             else if (token == "single"){
                 *is >> token;
                 Search::TT::init(hash_size);
-                // Search::go_single<state>(board, ep_target, std::stoi(token));
+                // Search::go_single(pos, std::stoi(token));
                 Search::TT::clear();
             }
             else if (token == "eval"){
-                // std::cout << Evaluation::evaluate<state.active_color>(board) << std::endl;
+                std::cout << pos.evaluate() << std::endl;
             }
 
     }
@@ -101,11 +98,24 @@ namespace ZeroLogic::UCI {
     static void display(Position<c> pos, std::istringstream* is){ std::cout << pos; }
     PositionToTemplate(display, void, std::istringstream*)
 
+    struct time{
+        timeval t;
+    };
+
+    inline u64 operator -(time t1, time t2){
+        u64 sec = t1.t.tv_sec - t2.t.tv_sec;
+        u64 msec = t1.t.tv_usec - t2.t.tv_usec;
+        return sec * 1000000 + msec;
+    }
+
     static void loop(int argc, char* argv[]) {
 
         Movegen::init_lookup();
         Hash::init_keys();
         Evaluation::init_tables();
+        time start{};
+        gettimeofday(&start.t, nullptr);
+
 
         std::string token, cmd, fen = start_fen;
 
@@ -143,10 +153,15 @@ namespace ZeroLogic::UCI {
             else if (token == "go")
                 _go(fen, &is);
 
-            else if (token == "test")
-                Test::perft();
+            else if (token == "test");
+                // Test::perft();
 
         } while (token != "quit");
+
+        time end{};
+        gettimeofday(&end.t, nullptr);
+        std::cout << end - start << std::endl;
+
 
     }
 }

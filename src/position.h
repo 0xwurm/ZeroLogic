@@ -88,6 +88,8 @@ namespace ZeroLogic{
                 hash(pos.hash), target(pos.target), cs(pos.cs), ep(pos.target)
         {}
 
+        inline Value evaluate();
+
         // get enemy sliders of specified type
         // used to generate check masks or check for attacks
         inline map eDiagonalSliders() const{ return eBishops | eQueens; }
@@ -148,7 +150,7 @@ namespace ZeroLogic{
             const map mov = from | to;
 
 #define enemy eP ^ ((t == PAWN) ? to : 0), eN ^ ((t == KNIGHT) ? to : 0), eB ^ ((t == BISHOP) ? to : 0), \
-                eR ^ ((t == ROOK) ? to : 0), eQ ^ ((t == QUEEN) ? to : 0), eK
+                eR ^ ((t == ROOK) ? to : 0), eQ ^ ((t == QUEEN) ? to : 0), eK ^ ((t == KING) ? to : 0)
 #define front hash.mod<p, t, pr>(from, to, *this), 0, cs.silent(), enemy
 
 
@@ -167,6 +169,8 @@ namespace ZeroLogic{
 
 #undef enemy
 #undef front
+
+            return {Hash{0}, 0, Castling::none(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         }
 
         template<CastleType ct, Piece t = PIECE_NONE>
@@ -182,14 +186,15 @@ namespace ZeroLogic{
         }
     public:
 
-        template<Piece p, Piece promo = PIECE_NONE>
+        template<Piece p, Piece promo = PIECE_NONE, bool def_capture = false>
         inline Position<!c> move_silent(Bit from, Bit to){
-            if (to & Occ){
+            if (def_capture || (to & Occ)){
                 if (to & ePawns)    return _move_silent<p, promo, PAWN>(from, to);
                 if (to & eKnights)  return _move_silent<p, promo, KNIGHT>(from, to);
                 if (to & eBishops)  return _move_silent<p, promo, BISHOP>(from, to);
                 if (to & eRooks)    return _move_silent<p, promo, ROOK>(from, to);
                 if (to & eQueens)   return _move_silent<p, promo, QUEEN>(from, to);
+                if (to & eKing)     return _move_silent<p, promo, KING>(from, to);
             }
             return _move_silent<p, promo>(from, to);
         }
@@ -369,3 +374,5 @@ namespace ZeroLogic{
     }
 
 }
+
+#include "eval.h"

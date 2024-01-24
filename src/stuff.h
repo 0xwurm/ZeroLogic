@@ -4,24 +4,25 @@
 #define COMPILETIME static constexpr inline
 #define getNumNotation(char1, char2) (7 - (char1 - 97) + 8 * (char2 - 49))
 
+typedef unsigned char u8;
+typedef signed char s8;
+typedef signed short s16;
+typedef unsigned short u16;
+typedef unsigned int u32;
+typedef unsigned long long u64;
+
 #ifdef USE_INTRIN
 #include <immintrin.h>
 #include <intrin.h>
 #define PEXT(X, Y) _pext_u64(X, Y)
 #define SquareOf(X) _tzcnt_u64(X)
-#define BitOf(X) _blsr_u64(X)
+#define BitOf(X) _blsi_u64(X)
 #define Bitloop(X) for(;X; X = _blsr_u64(X))
 #define BitCount(X) __popcnt64(X)
-inline static unsigned long long PopBit(unsigned long long& val)
-{
-unsigned long long lsb = _blsi_u64(val);
-val ^= lsb;
-return lsb;
-}
 #else
-inline static unsigned long long pext(unsigned long long x, unsigned long long mask) {
-unsigned long long res = 0;
-for(unsigned long long bb = 1; mask != 0; bb += bb) {
+    inline static u64 pext(u64 x, u64 mask) {
+u64 res = 0;
+for(u64 bb = 1; mask != 0; bb += bb) {
 if(x & mask & -mask) {
 res |= bb;
 }
@@ -31,19 +32,21 @@ return res;
 }
 #define PEXT(X, Y) pext(X, Y)
 #define SquareOf(X) std::countr_zero(X)
+#define BitOf(X) 1ull << SquareOf(X)
 #define Bitloop(X) for(;X; X &= X - 1)
 #define BitCount(X) std::popcount(X)
 #endif
 
-namespace ZeroLogic {
-    typedef unsigned char u8;
-    typedef signed char s8;
-    typedef signed short s16;
-    typedef unsigned short u16;
-    typedef unsigned int u32;
-	typedef unsigned long long u64;
+inline static u64 PopBit(u64& val)
+{
+    u64 lsb = BitOf(val);
+    val ^= lsb;
+    return lsb;
+}
 
-	using map = u64;
+namespace ZeroLogic{
+
+    using map = u64;
     using Bit = u64;
     using Square = u8;
     using Move = u16;
@@ -160,6 +163,7 @@ ENABLE_INCR_OPERATORS_ON(Rank)
 ENABLE_FULL_OPERATORS_ON(File)
 ENABLE_INCR_OPERATORS_ON(File)
 ENABLE_BASE_OPERATORS_ON(Direction)
+ENABLE_INCR_OPERATORS_ON(Piece)
 constexpr Color operator!(Color c) {return Color(!bool(c)); }
 
 constexpr Piece operator!(Piece p) {return Piece(p^8); } // flip piece color
@@ -183,6 +187,8 @@ constexpr Direction operator >>(Color c, Direction d)
     if (c == WHITE) return d;
     return Direction(-int(d));
 }
+
+constexpr Move operator>>(Piece p, Move m){m |= (p << 6); return m;}
 
 #undef ENABLE_FULL_OPERATORS_ON
 #undef ENABLE_INCR_OPERATORS_ON

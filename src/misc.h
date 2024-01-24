@@ -67,7 +67,7 @@ namespace ZeroLogic::Misc{
             if (from == 59 && to == 61) return _uci_move<BLACK_OOO>();
         }
 
-        return _uci_move<PIECE_INVALID>(from, to);
+        return _uci_move<PIECE_NONE>(from, to);
     }
 
     template<CastleType ct>
@@ -173,7 +173,7 @@ namespace ZeroLogic::Misc{
         Move mov = Search::TT::table[key].move;
 
         if (Search::TT::table[key].hash == pos.hash && Mfrom(mov) != Mto(mov))
-            return uci_move(mov) + standaloneMoves(pos, Mfrom(mov), Mto(mov), getPromo(mov));
+            return " " + uci_move(mov) + standaloneMoves(pos, Mfrom(mov), Mto(mov), getPromo(mov));
         return "";
     }
 

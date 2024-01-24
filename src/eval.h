@@ -1,26 +1,28 @@
 #pragma once
 
-namespace ZeroLogic::Evaluation{
+namespace ZeroLogic{
+    using namespace Evaluation;
 
     // eval in centipawns
     template <Color c>
-    FORCEINLINE static Value evaluate(const Boardstate::Board& board){
-        map brd[2][6] =
+    inline Value Position<c>::evaluate(){
+        map brd[14] =
                 {
-                {board.pawns<c>(), board.rooks<c>(), board.knights<c>(), board.bishops<c>(), board.queens<c>(), board.king<c>()},
-                {board.pawns<!c>(), board.rooks<!c>(), board.knights<!c>(), board.bishops<!c>(), board.queens<!c>(), board.king<!c>()}
+                oPawns, oRooks, oKnights, oBishops, oQueens, oKing,
+                0, 0,
+                ePawns, eRooks, eKnights, eBishops, eQueens, eKing
                 };
 
         Value mg_val{}, eg_val{}, gamephase{};
-        for (int p = 0; p < 6; p++){
-            Bitloop(brd[0][p]){
-                Square sq = SquareOf(brd[0][p]);
+        for (Piece p = PAWN; p <= KING; ++p){
+            Bitloop(brd[p]){
+                Square sq = SquareOf(brd[p]);
                 mg_val += mg_table[c][p][sq];
                 eg_val += eg_table[c][p][sq];
                 gamephase += gamephaseInc[p];
             }
-            Bitloop(brd[1][p]){
-                Square sq = SquareOf(brd[1][p]);
+            Bitloop(brd[!p]){
+                Square sq = SquareOf(brd[!p]);
                 mg_val -= mg_table[!c][p][sq];
                 eg_val -= eg_table[!c][p][sq];
                 gamephase += gamephaseInc[p];

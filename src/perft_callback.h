@@ -14,6 +14,7 @@ namespace ZeroLogic::Perft {
         static inline u64 overall_nodecount;
         static inline u8 full_depth;
 
+        template<Color c>
         using specific = u64;
 
     private:
@@ -173,7 +174,7 @@ namespace ZeroLogic::Perft {
         requires (c != NONE)
         static auto go(Position<c>& pos, u8 depth){
             init(depth);
-            u64 nodecount = 0;
+            specific<c> nodecount = 0;
             u8 start_depth = 0;
             test = istest;
             enumerate<Callback, false, true>(pos, start_depth, nodecount);
@@ -182,18 +183,7 @@ namespace ZeroLogic::Perft {
         }
 
         template<bool root, bool leaf, Color c>
-        static inline void kingmove(Position<c>& pos, map& moves, const u8& depth, u64& partial_nodecount){
-            if constexpr (leaf) count(moves, partial_nodecount);
-            else
-                while(moves)
-                {
-                    Bit to = PopBit(moves);
-                    _kingmove<root>(pos, to, depth, partial_nodecount);
-                }
-        }
-
-        template<bool root, bool leaf, Color c>
-        static inline void ep_move(Position<c>& pos, Bit& lep, Bit& rep, const u8& depth, u64& partial_nodecount){
+        static inline void ep_move(Position<c>& pos, Bit& lep, Bit& rep, const u8 depth, u64& partial_nodecount){
             if constexpr (leaf)
             {
                 if (lep) increment(partial_nodecount);
@@ -210,7 +200,7 @@ namespace ZeroLogic::Perft {
         static inline void pawn_move(
                 Position<c>& pos,
                 map& pr, map& pl, map& pr_promo, map& pl_promo, map& pf, map& pp, map& pf_promo,
-                const u8& depth, u64& partial_nodecount
+                const u8 depth, u64& partial_nodecount
                 )
         {
             if constexpr (leaf)
@@ -254,7 +244,7 @@ namespace ZeroLogic::Perft {
         }
 
         template<Piece piece, bool root, bool leaf, Color c>
-        static inline void silent_move(Position<c>& pos, map& moves, Bit from, const u8& depth, u64& partial_nodecount){
+        static inline void silent_move(Position<c>& pos, map& moves, Bit from, const u8 depth, u64& partial_nodecount){
             if constexpr (leaf) count(moves, partial_nodecount);
             else
                 while(moves)
@@ -262,8 +252,9 @@ namespace ZeroLogic::Perft {
                     _silent_move<piece, root>(pos, from, PopBit(moves), depth, partial_nodecount);
                 }
         }
+
         template<bool root, bool leaf, Color c>
-        static inline void rookmove(Position<c>& pos, map& moves, Bit& from, const u8& depth, u64& partial_nodecount){
+        static inline void rookmove(Position<c>& pos, map& moves, Bit& from, const u8 depth, u64& partial_nodecount){
             if constexpr (leaf) count(moves, partial_nodecount);
             else
                 while(moves)
@@ -273,9 +264,20 @@ namespace ZeroLogic::Perft {
         }
 
         template<CastleType ct, bool root, bool leaf, Color c>
-        static inline void castlemove(Position<c>& pos, const u8& depth, u64& partial_nodecount){
+        static inline void castlemove(Position<c>& pos, const u8 depth, u64& partial_nodecount){
             if constexpr (leaf) increment(partial_nodecount);
             else _castlemove<ct, root>(pos, depth, partial_nodecount);
+        }
+
+        template<bool root, bool leaf, Color c>
+        static inline void kingmove(Position<c>& pos, map& moves, const u8 depth, u64& partial_nodecount){
+            if constexpr (leaf) count(moves, partial_nodecount);
+            else
+                while(moves)
+                {
+                    Bit to = PopBit(moves);
+                    _kingmove<root>(pos, to, depth, partial_nodecount);
+                }
         }
     };
 }
