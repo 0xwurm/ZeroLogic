@@ -51,6 +51,8 @@ namespace ZeroLogic{
     using Square = u8;
     using Move = u16;
 
+    enum SquareWrap : Square{};
+
     static const char* start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
     enum Color{
@@ -88,6 +90,7 @@ namespace ZeroLogic{
         ABSOLUTE_MIN = -0x7fff,
         ABSOLUTE_MAX = 0x7fff,
         KNOWN_MATE = 31000,
+        INVALID_VALUE = -32001,
 
         Wkgn = 30000,
 
@@ -189,6 +192,11 @@ constexpr Direction operator >>(Color c, Direction d)
 }
 
 constexpr Move operator>>(Piece p, Move m){m |= (p << 6); return m;}
+
+constexpr bool operator==(SquareWrap sq, const char* str)
+{
+    return sq == getNumNotation(str[0], str[1]);
+}
 
 #undef ENABLE_FULL_OPERATORS_ON
 #undef ENABLE_INCR_OPERATORS_ON

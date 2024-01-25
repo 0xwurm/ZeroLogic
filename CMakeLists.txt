@@ -25,4 +25,6 @@ add_executable(ZeroLogic
         src/search.h
         src/position.h
         src/hash.h
-        src/tests.h)
+        src/tests.h
+        src/limit.h
+        src/game.h)

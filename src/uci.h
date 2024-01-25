@@ -1,22 +1,19 @@
 #pragma once
 #include "position.h"
 #include "misc.h"
+#include "limit.h"
 #include "movegenerator.h"
-#include <sys/time.h>
-// #include "search_callback.h"
-// #include "perft_callback.h"
-// #include "tests.h"
+#include "search_callback.h"
+#include "perft_callback.h"
+#include "tests.h"
+#include "game.h"
 
 namespace ZeroLogic::UCI {
 
     static const char* engine_info = "id name ZeroLogic 1\nid author wurm\n";
     static const char* options = "option name Hash type spin default 67108863 min 1 max 4294967295\n";
 
-#ifdef USE_INTRIN
-    static u32 hash_size = 0x3ffffff;
-#else
-    static u32 hash_size = 0x7ffff;
-#endif
+    static u32 hash_size = (USE_INTRIN) ? 0x3ffffff : 0x7ffff; // TODO: bad
 
     // gets fen for new position
     // if 'moves' are specified it initializes a Position object to use its pre-existing, 'move' methods
@@ -36,7 +33,7 @@ namespace ZeroLogic::UCI {
         else if (token == "test")
         {
             is >> token;
-            // fen = Test::perftTests[std::stoi(token) - 1].fen;
+            fen = Test::perftTests[std::stoi(token) - 1].fen;
             is >> token;
         }
         else if (token == "fen")
@@ -63,59 +60,95 @@ namespace ZeroLogic::UCI {
     }
 
     template <Color c>
+    static void go_limits(Position<c>& pos){
+        limits.start_time = Time::now();
+
+        if (limits.type == PERFT)
+            Perft::Callback::go(pos);
+
+        else if (limits.type == SINGLE)
+            Search::go_single(pos);
+
+        else
+            Search::go(pos);
+    }
+
+    template <Color c>
     static void go(Position<c> pos, std::istringstream* is) {
 
         std::string token;
 
         while (*is >> token)
 
-            if (token == "depth") {
+            if (token == "depth"){
                 *is >> token;
-                Search::TT::init(hash_size);
-                // Search::go(pos, std::stoi(token));
-                Search::TT::clear();
+                limits.type = DEPTH;
+                limits.allowed_depth = std::stoi(token);
             }
+
+            else if (token == "wtime"){
+                *is >> token;
+                limits.set_time(c, std::stoi(token));
+            }else if (token == "btime"){
+                *is >> token;
+                limits.set_time(!c, std::stoi(token));
+            }else if (token == "winc"){
+                *is >> token;
+                limits.set_inc(c, std::stoi(token));
+            }else if (token == "binc"){
+                *is >> token;
+                limits.set_inc(!c, std::stoi(token));
+            }else if (token == "movestogo"){
+                *is >> token;
+                limits.togo = std::stoi(token);
+            }
+
+            else if (token == "movetime"){
+                *is >> token;
+                limits.type = MOVETIME;
+                limits.allowed_time = std::stoi(token);
+            }
+
             else if (token == "perft") {
                 *is >> token;
-                Perft::TT::init(hash_size);
-                // Perft::Callback::go(pos, std::stoi(token));
-                Perft::TT::clear();
+                limits.type = PERFT;
+                limits.allowed_depth = std::stoi(token);
             }
             else if (token == "single"){
                 *is >> token;
-                Search::TT::init(hash_size);
-                // Search::go_single(pos, std::stoi(token));
-                Search::TT::clear();
+                limits.type = SINGLE;
+                limits.allowed_depth = std::stoi(token);
+            }
+            else if (token == "nodes"){
+                *is >> token;
+                limits.type = NODES;
+                limits.allowed_nodes = std::stoi(token);
             }
             else if (token == "eval"){
                 std::cout << pos.evaluate() << std::endl;
+                return;
             }
+
+        go_limits(pos);
 
     }
     PositionToTemplate(go, void, std::istringstream*)
 
     template<Color c>
-    static void display(Position<c> pos, std::istringstream* is){ std::cout << pos; }
-    PositionToTemplate(display, void, std::istringstream*)
+    static void display(Position<c> pos, std::istringstream* is){
+        std::cout << pos << "Fen: " << std::string(pos) << "\n";
 
-    struct time{
-        timeval t;
-    };
-
-    inline u64 operator -(time t1, time t2){
-        u64 sec = t1.t.tv_sec - t2.t.tv_sec;
-        u64 msec = t1.t.tv_usec - t2.t.tv_usec;
-        return sec * 1000000 + msec;
+        char hex_hash[100];
+        std::sprintf(hex_hash, "%llX", pos.hash.getVal());
+        std::cout << "Key: " << hex_hash << "\n" << std::endl;
     }
+    PositionToTemplate(display, void, std::istringstream*)
 
     static void loop(int argc, char* argv[]) {
 
-        Movegen::init_lookup();
+        Lookup::fill();
         Hash::init_keys();
         Evaluation::init_tables();
-        time start{};
-        gettimeofday(&start.t, nullptr);
-
 
         std::string token, cmd, fen = start_fen;
 
@@ -153,14 +186,13 @@ namespace ZeroLogic::UCI {
             else if (token == "go")
                 _go(fen, &is);
 
-            else if (token == "test");
-                // Test::perft();
+            else if (token == "test")
+                Test::perft();
+
+            else if (token == "game")
+                Game::_go(fen, &is);
 
         } while (token != "quit");
-
-        time end{};
-        gettimeofday(&end.t, nullptr);
-        std::cout << end - start << std::endl;
 
 
     }

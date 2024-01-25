@@ -297,21 +297,15 @@ namespace ZeroLogic{
     std::ostream& operator <<(std::ostream& stream, Position<c>& pos){
         stream << "\n +---+---+---+---+---+---+---+---+\n";
 
-        for (Rank r = RANK_EIGHT; r >= RANK_ONE; --r)
+        for (int r = 7; r >= 0; --r)
         {
-            for (File f = FILE_A; f >= FILE_H; --f)
-                stream << " | " << *pos.getPiece(r, f);
+            for (int f = 7; f >= 0; --f)
+                stream << " | " << *pos.getPiece(Rank(r), File(f));
 
             stream << " | " << (r + 1) << "\n +---+---+---+---+---+---+---+---+\n";
         }
         stream << "   a   b   c   d   e   f   g   h\n";
-
-        stream << "Fen: " << std::string(pos) << "\n";
-        char hex_hash[100];
-        std::sprintf(hex_hash, "%llX", pos.hash.getVal());
-        stream << "Key: " << hex_hash << "\n";
-
-        return stream << std::endl;
+        return stream;
     }
 
     // convert fen string to position for further processing

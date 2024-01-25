@@ -1,7 +1,7 @@
 #pragma once
 
 namespace ZeroLogic {
-    static u32 key_mask = 0x3ffffff;
+    u32 key_mask = 0x3ffffff; // TODO: ????
 }
 
 #include "hash.h"
@@ -14,15 +14,15 @@ namespace ZeroLogic::Perft::TT{
         u8 depth{};
     };
 
-    static entry* table;
+    entry* table;
 
-    static void init(u32 size = key_mask){
+    void init(u32 size = key_mask){
         table = (entry*) calloc(size, sizeof(entry));
         for (u32 s = 0; s <= size; s++)
             table[s].depth = 0xff;
         key_mask = size;
     }
-    static void clear(){
+    void clear(){
         free(table);
     }
 
@@ -46,17 +46,17 @@ namespace ZeroLogic::Search::TT {
         Move move{};
         u8 depth{};
     };
-    static entry* table;
+    entry* table;
 
-    static void init(u32 size = key_mask){
+    void init(u32 size = key_mask){
         table = (entry*) calloc(size, sizeof(entry));
         key_mask = size;
     }
-    static void clear(){
+    void clear(){
         free(table);
     }
 
-    inline static void replace(entry entry){
+    inline void replace(entry entry){
         if (entry.depth >= table[*entry.hash].depth && entry.move)
             table[*entry.hash] = entry;
     }
@@ -65,10 +65,10 @@ namespace ZeroLogic::Search::TT {
 
 namespace ZeroLogic::Evaluation{
 
-    static Value mg_value[6] = { PAWN_MG, ROOK_MG, KNIGHT_MG, BISHOP_MG, QUEEN_MG, ZERO};
-    static Value eg_value[6] = { PAWN_EG, ROOK_EG, KNIGHT_EG, BISHOP_EG, QUEEN_EG, ZERO};
+    Value mg_value[6] = { PAWN_MG, ROOK_MG, KNIGHT_MG, BISHOP_MG, QUEEN_MG, ZERO};
+    Value eg_value[6] = { PAWN_EG, ROOK_EG, KNIGHT_EG, BISHOP_EG, QUEEN_EG, ZERO};
 
-    static int mg_pawn_table[64] = {
+    int mg_pawn_table[64] = {
             0,   0,   0,   0,   0,   0,  0,   0,
             98, 134,  61,  95,  68, 126, 34, -11,
             -6,   7,  26,  31,  65,  56, 25, -20,
@@ -79,7 +79,7 @@ namespace ZeroLogic::Evaluation{
             0,   0,   0,   0,   0,   0,  0,   0,
     };
 
-    static int eg_pawn_table[64] = {
+    int eg_pawn_table[64] = {
             0,   0,   0,   0,   0,   0,   0,   0,
             178, 173, 158, 134, 147, 132, 165, 187,
             94, 100,  85,  67,  56,  53,  82,  84,
@@ -90,7 +90,7 @@ namespace ZeroLogic::Evaluation{
             0,   0,   0,   0,   0,   0,   0,   0,
     };
 
-    static int mg_knight_table[64] = {
+    int mg_knight_table[64] = {
             -167, -89, -34, -49,  61, -97, -15, -107,
             -73, -41,  72,  36,  23,  62,   7,  -17,
             -47,  60,  37,  65,  84, 129,  73,   44,
@@ -101,7 +101,7 @@ namespace ZeroLogic::Evaluation{
             -105, -21, -58, -33, -17, -28, -19,  -23,
     };
 
-    static int eg_knight_table[64] = {
+    int eg_knight_table[64] = {
             -58, -38, -13, -28, -31, -27, -63, -99,
             -25,  -8, -25,  -2,  -9, -25, -24, -52,
             -24, -20,  10,   9,  -1,  -9, -19, -41,
@@ -112,7 +112,7 @@ namespace ZeroLogic::Evaluation{
             -29, -51, -23, -15, -22, -18, -50, -64,
     };
 
-    static int mg_bishop_table[64] = {
+    int mg_bishop_table[64] = {
             -29,   4, -82, -37, -25, -42,   7,  -8,
             -26,  16, -18, -13,  30,  59,  18, -47,
             -16,  37,  43,  40,  35,  50,  37,  -2,
@@ -123,7 +123,7 @@ namespace ZeroLogic::Evaluation{
             -33,  -3, -14, -21, -13, -12, -39, -21,
     };
 
-    static int eg_bishop_table[64] = {
+    int eg_bishop_table[64] = {
             -14, -21, -11,  -8, -7,  -9, -17, -24,
             -8,  -4,   7, -12, -3, -13,  -4, -14,
             2,  -8,   0,  -1, -2,   6,   0,   4,
@@ -134,7 +134,7 @@ namespace ZeroLogic::Evaluation{
             -23,  -9, -23,  -5, -9, -16,  -5, -17,
     };
 
-    static int mg_rook_table[64] = {
+    int mg_rook_table[64] = {
             32,  42,  32,  51, 63,  9,  31,  43,
             27,  32,  58,  62, 80, 67,  26,  44,
             -5,  19,  26,  36, 17, 45,  61,  16,
@@ -145,7 +145,7 @@ namespace ZeroLogic::Evaluation{
             -19, -13,   1,  17, 16,  7, -37, -26,
     };
 
-    static int eg_rook_table[64] = {
+    int eg_rook_table[64] = {
             13, 10, 18, 15, 12,  12,   8,   5,
             11, 13, 13, 11, -3,   3,   8,   3,
             7,  7,  7,  5,  4,  -3,  -5,  -3,
@@ -156,7 +156,7 @@ namespace ZeroLogic::Evaluation{
             -9,  2,  3, -1, -5, -13,   4, -20,
     };
 
-    static int mg_queen_table[64] = {
+    int mg_queen_table[64] = {
             -28,   0,  29,  12,  59,  44,  43,  45,
             -24, -39,  -5,   1, -16,  57,  28,  54,
             -13, -17,   7,   8,  29,  56,  47,  57,
@@ -167,7 +167,7 @@ namespace ZeroLogic::Evaluation{
             -1, -18,  -9,  10, -15, -25, -31, -50,
     };
 
-    static int eg_queen_table[64] = {
+    int eg_queen_table[64] = {
             -9,  22,  22,  27,  27,  19,  10,  20,
             -17,  20,  32,  41,  58,  25,  30,   0,
             -20,   6,   9,  49,  47,  35,  19,   9,
@@ -178,7 +178,7 @@ namespace ZeroLogic::Evaluation{
             -33, -28, -22, -43,  -5, -32, -20, -41,
     };
 
-    static int mg_king_table[64] = {
+    int mg_king_table[64] = {
             -65,  23,  16, -15, -56, -34,   2,  13,
             29,  -1, -20,  -7,  -8,  -4, -38, -29,
             -9,  24,   2, -16, -20,   6,  22, -22,
@@ -189,7 +189,7 @@ namespace ZeroLogic::Evaluation{
             -15,  36,  12, -54,   8, -28,  24,  14,
     };
 
-    static int eg_king_table[64] = {
+    int eg_king_table[64] = {
             -74, -35, -18, -18, -11,  15,   4, -17,
             -12,  17,  14,  17,  17,  38,  23,  11,
             10,  17,  23,  15,  20,  45,  44,  13,
@@ -200,7 +200,7 @@ namespace ZeroLogic::Evaluation{
             -53, -34, -21, -11, -28, -14, -24, -43
     };
 
-    static int* mg_psqt[6] =
+    int* mg_psqt[6] =
             {
             mg_pawn_table,
             mg_rook_table,
@@ -210,7 +210,7 @@ namespace ZeroLogic::Evaluation{
             mg_king_table
             };
 
-    static int* eg_psqt[6] =
+    int* eg_psqt[6] =
             {
             eg_pawn_table,
             eg_rook_table,
@@ -220,11 +220,11 @@ namespace ZeroLogic::Evaluation{
             eg_king_table
             };
 
-    static int gamephaseInc[6] = {0,2,1,1,4,0};
-    static Value mg_table[2][6][64];
-    static Value eg_table[2][6][64];
+    int gamephaseInc[6] = {0,2,1,1,4,0};
+    Value mg_table[2][6][64];
+    Value eg_table[2][6][64];
 
-    static void init_tables()
+    void init_tables()
     {
         for (int p = 0; p < 6; p++){
             for (int sq = 0; sq < 64; sq++){
@@ -296,13 +296,13 @@ namespace ZeroLogic::Lookup{
         return static_cast<long long>(moves);
     }
 
-    static constexpr map king[64] = { 770, 1797, 3594, 7188, 14376, 28752, 57504, 49216, 197123, 460039, 920078, 1840156, 3680312, 7360624, 14721248, 12599488, 50463488, 117769984, 235539968, 471079936, 942159872, 1884319744, 3768639488, 3225468928, 12918652928, 30149115904, 60298231808, 120596463616, 241192927232, 482385854464, 964771708928, 825720045568, 3307175149568, 7718173671424, 15436347342848, 30872694685696, 61745389371392, 123490778742784, 246981557485568, 211384331665408, 846636838289408, 1975852459884544, 3951704919769088, 7903409839538176, 15806819679076352, 31613639358152704, 63227278716305408, 54114388906344448, 216739030602088448, 505818229730443264, 1011636459460886528, 2023272918921773056, 4046545837843546112, 8093091675687092224, 16186183351374184448U, 13853283560024178688U, 144959613005987840, 362258295026614272, 724516590053228544, 1449033180106457088, 2898066360212914176, 5796132720425828352, 11592265440851656704U, 4665729213955833856 };
-    static constexpr map knight[64] = { 132096, 329728, 659712, 1319424, 2638848, 5277696, 10489856, 4202496, 33816580, 84410376, 168886289, 337772578, 675545156, 1351090312, 2685403152, 1075839008, 8657044482, 21609056261, 43234889994, 86469779988, 172939559976, 345879119952, 687463207072, 275414786112, 2216203387392, 5531918402816, 11068131838464, 22136263676928, 44272527353856, 88545054707712, 175990581010432, 70506185244672, 567348067172352, 1416171111120896, 2833441750646784, 5666883501293568, 11333767002587136, 22667534005174272, 45053588738670592, 18049583422636032, 145241105196122112, 362539804446949376, 725361088165576704, 1450722176331153408, 2901444352662306816, 5802888705324613632, 11533718717099671552U, 4620693356194824192, 288234782788157440, 576469569871282176, 1224997833292120064, 2449995666584240128, 4899991333168480256, 9799982666336960512U, 1152939783987658752, 2305878468463689728, 1128098930098176, 2257297371824128, 4796069720358912, 9592139440717824, 19184278881435648, 38368557762871296, 4679521487814656, 9077567998918656 };
-    static map slider[107648]{};
-    static pext_info r_info[64]{};
-    static pext_info b_info[64]{};
+    constexpr map king[64] = { 770, 1797, 3594, 7188, 14376, 28752, 57504, 49216, 197123, 460039, 920078, 1840156, 3680312, 7360624, 14721248, 12599488, 50463488, 117769984, 235539968, 471079936, 942159872, 1884319744, 3768639488, 3225468928, 12918652928, 30149115904, 60298231808, 120596463616, 241192927232, 482385854464, 964771708928, 825720045568, 3307175149568, 7718173671424, 15436347342848, 30872694685696, 61745389371392, 123490778742784, 246981557485568, 211384331665408, 846636838289408, 1975852459884544, 3951704919769088, 7903409839538176, 15806819679076352, 31613639358152704, 63227278716305408, 54114388906344448, 216739030602088448, 505818229730443264, 1011636459460886528, 2023272918921773056, 4046545837843546112, 8093091675687092224, 16186183351374184448U, 13853283560024178688U, 144959613005987840, 362258295026614272, 724516590053228544, 1449033180106457088, 2898066360212914176, 5796132720425828352, 11592265440851656704U, 4665729213955833856 };
+    constexpr map knight[64] = { 132096, 329728, 659712, 1319424, 2638848, 5277696, 10489856, 4202496, 33816580, 84410376, 168886289, 337772578, 675545156, 1351090312, 2685403152, 1075839008, 8657044482, 21609056261, 43234889994, 86469779988, 172939559976, 345879119952, 687463207072, 275414786112, 2216203387392, 5531918402816, 11068131838464, 22136263676928, 44272527353856, 88545054707712, 175990581010432, 70506185244672, 567348067172352, 1416171111120896, 2833441750646784, 5666883501293568, 11333767002587136, 22667534005174272, 45053588738670592, 18049583422636032, 145241105196122112, 362539804446949376, 725361088165576704, 1450722176331153408, 2901444352662306816, 5802888705324613632, 11533718717099671552U, 4620693356194824192, 288234782788157440, 576469569871282176, 1224997833292120064, 2449995666584240128, 4899991333168480256, 9799982666336960512U, 1152939783987658752, 2305878468463689728, 1128098930098176, 2257297371824128, 4796069720358912, 9592139440717824, 19184278881435648, 38368557762871296, 4679521487814656, 9077567998918656 };
+    map slider[107648]{};
+    pext_info r_info[64]{};
+    pext_info b_info[64]{};
 
-    COMPILETIME void Fill(){
+    COMPILETIME void fill(){
 
             // filling slider lookup table
             int index = 0;
@@ -333,23 +333,23 @@ namespace ZeroLogic::Lookup{
             }
         }
 
-    static inline map r_atk(const Square& index, map occ){
+    inline map r_atk(const Square& index, map occ){
         return *(r_info[index].ptr + PEXT(occ, r_info[index].mask));
     }
-    static inline map r_xray(const Square& index, const map& occ){
+    inline map r_xray(const Square& index, const map& occ){
         map attacked = r_atk(index, occ);
         return attacked ^ r_atk(index, (attacked & occ) ^ occ);
     }
-    static inline map b_atk(const Square& index, map occ){
+    inline map b_atk(const Square& index, map occ){
         return *(b_info[index].ptr + PEXT(occ, b_info[index].mask));
     }
-    static inline map b_xray(const Square& index, const map& occ){
+    inline map b_xray(const Square& index, const map& occ){
         map attacked = b_atk(index, occ);
         return attacked ^ b_atk(index, (attacked & occ) ^ occ);
     }
 
     // tables hell
-    static constexpr map check_between[4096] = {
+    constexpr map check_between[4096] = {
             0x0000000000000000, 0x0000000000000001, 0x0000000000000003, 0x0000000000000007, 0x000000000000000F, 0x000000000000001F, 0x000000000000003F, 0x000000000000007F,
             0x0000000000000001, 0x0000000000000001, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000,
             0x0000000000000101, 0x0000000000000000, 0x0000000000000201, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000,

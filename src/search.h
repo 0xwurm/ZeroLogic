@@ -4,11 +4,9 @@ namespace ZeroLogic::Search {
 
     using namespace Movegen;
 
-    static inline u32 nodecount, tt_hits;
+    static inline u32 tt_hits;
     static inline u8 seldepth;
     static inline u8 full_depth;
-
-    static inline std::time_t start_time;
 
     template<Color c>
     struct Movelist{
@@ -29,6 +27,18 @@ namespace ZeroLogic::Search {
             *start = *best;
             *best = buffer;
         }
+
+        inline bool contains(std::string& m) const{
+            for (RatedMove<c>* head = start; head < end; ++head)
+                if (Misc::uci_move(head->move) == m) return true;
+            return false;
+        }
+
+        inline void print() const{
+            for (RatedMove<c>* head = start; head < end; ++head)
+                std::cout << Misc::uci_move(head->move) << ", ";
+            std::cout << std::endl;
+        }
     };
 
     template<Color c>
@@ -36,7 +46,10 @@ namespace ZeroLogic::Search {
 
     template <Color c>
     static Value nsearch(Position<c>& pos, const u8 depth, Value alpha, Value beta){
-        ++nodecount;
+        if (!depth) {
+            ++limits.nodecount;
+            return DRAW;
+        }
 
         Movelist<c> ml;
         bool check = enumerate<NSearch, Callback>(pos, depth, ml.end);
@@ -47,26 +60,28 @@ namespace ZeroLogic::Search {
         }
 
         Move bestmove{};
-        for ( ; ml.start < ml.end; ++ml.start){
+        for ( ; ml.start < ml.end; ++ml.start)
+        {
+            if (limits.stop()) return INVALID_VALUE;
 
-            ml.sort();
+            // ml.sort();
             const Value nodeval = ml.start->callback(pos, ml.start->move, depth, -beta, -alpha);
 
             if (nodeval > alpha) {
                 alpha = nodeval;
                 bestmove = ml.start->move;
 
-                if (alpha >= beta) break;
+                // if (alpha >= beta) break;
             }
         }
 
-        TT::replace({pos.hash, bestmove, depth});
+        // TT::replace({pos.hash, bestmove, depth});
         return alpha;
     }
 
     template<Color c>
     static Value qsearch(Position<c>& pos, Value alpha, Value beta){
-        ++nodecount;
+        ++limits.nodecount;
         Movelist<c> ml;
 
         // we only enumerate captures and queen promotions (unless we are in check)
@@ -79,6 +94,7 @@ namespace ZeroLogic::Search {
 
             for (; ml.start < ml.end; ++ml.start)
             {
+                if (limits.stop()) return INVALID_VALUE;
                 ml.sort();
                 if (ml.start->static_rating < 0) break;
                 if (stand_pat + ml.start->static_rating + 200 < alpha) break; // delta pruning
@@ -95,6 +111,7 @@ namespace ZeroLogic::Search {
             if (ml.start == ml.end) return -KNOWN_MATE;
             for (; ml.start < ml.end; ++ml.start)
             {
+                if (limits.stop()) return INVALID_VALUE;
                 ml.sort();
                 const Value nodeval = ml.start->callback(pos, ml.start->move, 0, -beta, -alpha);
 
@@ -111,6 +128,7 @@ namespace ZeroLogic::Search {
     template<SearchType st = NSearch, Color c>
     static inline Value search(Position<c>& pos, Value alpha, Value beta, u8 depth = 0)
     {
+        return nsearch(pos, depth, alpha, beta);
         if (st == QSearch || !depth) return qsearch(pos, alpha, beta);
         if constexpr (st == NSearch) return nsearch(pos, depth, alpha, beta);
         return ZERO;
@@ -118,23 +136,17 @@ namespace ZeroLogic::Search {
 
     template <Color c>
     static void display_info(Position<c>& pos, Value evaluation) {
-#ifdef USE_INTRIN
-        auto duration = std::time(nullptr) - start_time;
-        auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+        u64 duration_ms = (Time::now() - limits.start_time) / 1000;
         if (!duration_ms) duration_ms = 1;
-#endif
 
         std::stringstream info;
         info    << "info"
                 << " depth "        << int(full_depth)
                 << " seldepth "     << int(seldepth)
                 << " score "        << Misc::uci_eval(evaluation)
-                << " nodes "        << nodecount;
-
-#ifdef USE_INTRIN
-        info    << " time "         << duration_ms
-                << " nps "          << 1000 * (u64(nodecount) / duration_ms);
-#endif
+                << " nodes "        << limits.nodecount
+                << " time "         << duration_ms
+                << " nps "          << 1000 * limits.nodecount / duration_ms;
 
         info    << " pv"            << Misc::uci_pv(pos);
 
@@ -150,16 +162,19 @@ namespace ZeroLogic::Search {
     }
 
     template<Color c>
-    static void go(Position<c>& pos, u8 depth){
-        nodecount = 0;
+    static std::string go(Position<c>& pos, bool display = true){
+        limits.nodecount = 0;
         tt_hits = 0;
-        start_time = std::time(nullptr);
+        TT::init();
 
         int wlow = 25, whigh = 25;
         Value last_val = ZERO;
 
-        for (u8 currdepth = 1; currdepth <= depth; ){
+        if (limits.type == GAMETIME) limits.adjust();
+
+        for (u8 currdepth = 1; limits.type != DEPTH || currdepth <= limits.allowed_depth; ){
             Value val = go_iteration(pos, currdepth, last_val - wlow, last_val + whigh);
+            if (limits.stop()) break;
 
             if      (val <= last_val - wlow)    wlow *= 3;
             else if (val >= last_val + whigh)   whigh *= 3;
@@ -168,21 +183,25 @@ namespace ZeroLogic::Search {
                 wlow = 25;
                 whigh = 25;
                 currdepth++;
-                display_info(pos, val);
+                if (display) display_info(pos, val);
                 if (abs(last_val) > 30000) break;
             }
         }
 
-        std::cout << "bestmove " << Misc::uci_move(TT::table[*pos.hash].move) << std::endl;
+        std::string bestmove = Misc::uci_move(TT::table[*pos.hash].move);
+        std::cout << "bestmove " << bestmove << std::endl;
+        TT::clear();
+        return bestmove;
     }
 
     template<Color c>
-    static void go_single(Position<c>& pos, u8 depth){
-        nodecount = 0;
+    static void go_single(Position<c>& pos){
+        limits.nodecount = 0;
         tt_hits = 0;
-        start_time = std::time(nullptr);
+        TT::init();
 
-        Value val = go_iteration(pos, depth, ABSOLUTE_MIN, ABSOLUTE_MAX);
+        Value val = go_iteration(pos, limits.allowed_depth, ABSOLUTE_MIN, ABSOLUTE_MAX);
         display_info(pos, val);
+        TT::clear();
     }
 }

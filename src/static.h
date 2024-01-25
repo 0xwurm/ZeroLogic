@@ -87,10 +87,10 @@ namespace ZeroLogic::Search {
             static inline Value rate(Position<c>& pos, const Move& move, const u8& tosq = 0, const Bit from = 0, const Bit exsq = 0) {
 
                 const u32 key = *pos.hash;
-                if (TT::table[key].hash == pos.hash && TT::table[key].move == move) return HASHMOVE;
+                // if (TT::table[key].hash == pos.hash && TT::table[key].move == move) return HASHMOVE;
 
-                if (exsq & pos.enemy) return SEE<piece, promotion>(pos, tosq, from, exsq);
-                if constexpr (promotion) return QUEEN_MG - PAWN_MG;
+                // if (exsq & pos.enemy) return SEE<piece, promotion>(pos, tosq, from, exsq);
+                // if constexpr (promotion) return QUEEN_MG - PAWN_MG;
                 return NON_CAPTURE; // TODO: psqt diff
             }
     };

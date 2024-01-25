@@ -31,13 +31,18 @@ namespace ZeroLogic::Misc{
     static std::string _uci_move(){ return uci_castles[type]; }
 
     template <Piece promotion_to = PIECE_NONE>
+    static std::string _uci_move(SquareWrap from, SquareWrap to) {
+        if constexpr (promotion_to == PIECE_NONE) return uci_squares[from] + uci_squares[to];
+        return uci_squares[from] + uci_squares[to] + uci_promotion[promotion_to - 1];
+    }
+    template <Piece promotion_to = PIECE_NONE>
     static std::string _uci_move(Square from, Square to) {
         if constexpr (promotion_to == PIECE_NONE) return uci_squares[from] + uci_squares[to];
         return uci_squares[from] + uci_squares[to] + uci_promotion[promotion_to - 1];
     }
 
-    static Square Mfrom(Move enc){ return enc & 0b111111; }
-    static Square Mto(Move enc){ return enc >> 10; }
+    static SquareWrap Mfrom(Move enc){ return SquareWrap(enc & 0b111111); }
+    static SquareWrap Mto(Move enc){ return SquareWrap(enc >> 10); }
     static u16 Mflag(Move enc){ return (enc >> 6) & 0b1111; }
 
     static Piece getPromo(Move enc){
@@ -48,8 +53,8 @@ namespace ZeroLogic::Misc{
 
     static std::string uci_move(Move enc){
 
-        Square from = Mfrom(enc);
-        Square to = Mto(enc);
+        SquareWrap from = Mfrom(enc);
+        SquareWrap to = Mto(enc);
         u16 flag = Mflag(enc);
 
         if (flag & 0b111){
@@ -61,10 +66,10 @@ namespace ZeroLogic::Misc{
         }
 
         if (flag & 0b1000) {
-            if (from == 3 && to == 1)   return _uci_move<WHITE_OO>();
-            if (from == 3 && to == 5)   return _uci_move<WHITE_OOO>();
-            if (from == 59 && to == 57) return _uci_move<BLACK_OO>();
-            if (from == 59 && to == 61) return _uci_move<BLACK_OOO>();
+            if (from == "e1" && to == "g1")   return _uci_move<WHITE_OO>();
+            if (from == "e1" && to == "c1")   return _uci_move<WHITE_OOO>();
+            if (from == "e8" && to == "g8") return _uci_move<BLACK_OO>();
+            if (from == "e8" && to == "c8") return _uci_move<BLACK_OOO>();
         }
 
         return _uci_move<PIECE_NONE>(from, to);

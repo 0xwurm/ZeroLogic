@@ -41,9 +41,8 @@ namespace ZeroLogic::Test{
     template<Color c>
     static u64 goPerft(Position<c> pos, u8 depth)
     {
-        Perft::TT::init();
-        u64 count = Perft::Callback::go<true>(pos, depth);
-        Perft::TT::clear();
+        limits.allowed_depth = depth;
+        u64 count = Perft::Callback::go<true>(pos);
         return count;
     }
     PositionToTemplate(goPerft, u64, u8)

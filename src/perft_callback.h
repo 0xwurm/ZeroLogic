@@ -8,7 +8,6 @@ namespace ZeroLogic::Perft {
     public:
 
         static inline u32 tt_hits;
-        static inline std::chrono::steady_clock::time_point start_time;
         static inline bool depth1;
         static inline bool test;
         static inline u64 overall_nodecount;
@@ -19,13 +18,14 @@ namespace ZeroLogic::Perft {
 
     private:
 
-        static void init(u8& depth){
-            depth1 = depth == 1;
-            if (depth == 1) depth++;
+        static void init(){
+            TT::init();
+            depth1 = limits.allowed_depth == 1;
+            if (depth1) limits.allowed_depth++;
             tt_hits = 0;
-            full_depth = depth - 1;
+            full_depth = limits.allowed_depth - 1;
             overall_nodecount = 0;
-            start_time = std::chrono::steady_clock::now();
+            limits.start_time = Time::now();
         }
 
         static inline void count(map moves, u64& partial_nodecount){
@@ -55,9 +55,8 @@ namespace ZeroLogic::Perft {
         }
 
         static void display_info(){
-            auto duration = std::chrono::steady_clock::now() - start_time;
-            auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
-            auto duration_mys = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+            u64 duration_mys = Time::now() - limits.start_time;
+            u64 duration_ms = duration_mys / 1000;
             double sPmn = double(duration_mys) / double(overall_nodecount);
 
             std::cout << std::endl;
@@ -172,12 +171,13 @@ namespace ZeroLogic::Perft {
 
         template<bool istest = false, Color c>
         requires (c != NONE)
-        static auto go(Position<c>& pos, u8 depth){
-            init(depth);
+        static auto go(Position<c>& pos){
+            init();
             specific<c> nodecount = 0;
             u8 start_depth = 0;
             test = istest;
             enumerate<Callback, false, true>(pos, start_depth, nodecount);
+            TT::clear();
             if constexpr (istest) return overall_nodecount;
             display_info();
         }
