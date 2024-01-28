@@ -3,7 +3,7 @@
 #include "misc.h"
 #include "limit.h"
 #include "movegenerator.h"
-#include "search_callback.h"
+#include "search.h"
 #include "perft_callback.h"
 #include "tests.h"
 #include "game.h"

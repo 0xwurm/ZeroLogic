@@ -198,6 +198,15 @@ namespace ZeroLogic{
             }
             return _move_silent<p, promo>(from, to);
         }
+        inline Position<!c> move_silent(Bit from, Bit to){
+            if (from & oPawns)      return move_silent<PAWN>(from, to);
+            if (from & oKnights)    return move_silent<KNIGHT>(from, to);
+            if (from & oBishops)    return move_silent<BISHOP>(from, to);
+            if (from & oRooks)      return move_silent<ROOK>(from, to);
+            if (from & oQueens)     return move_silent<QUEEN>(from, to);
+            return move_silent<KING>(from, to);
+        }
+
         template<CastleType ct>
         inline Position<!c> move_loudRook(Bit from, Bit to){
             if (to & Occ){

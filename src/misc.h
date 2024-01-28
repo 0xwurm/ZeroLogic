@@ -43,8 +43,7 @@ namespace ZeroLogic::Misc{
 
     static SquareWrap Mfrom(Move enc){ return SquareWrap(enc & 0b111111); }
     static SquareWrap Mto(Move enc){ return SquareWrap(enc >> 10); }
-    static u16 Mflag(Move enc){ return (enc >> 6) & 0b1111; }
-
+    static Flags Mflag(Move enc){ return Flags(enc & FLAG); }
     static Piece getPromo(Move enc){
         u16 flag = Mflag(enc);
         if (flag & 0b111) return Piece(flag & 0b111);
@@ -55,19 +54,16 @@ namespace ZeroLogic::Misc{
 
         SquareWrap from = Mfrom(enc);
         SquareWrap to = Mto(enc);
-        u16 flag = Mflag(enc);
+        Flags flag = Mflag(enc);
 
-        if (flag & 0b111){
-            flag &= 0b111;
-            if (flag == QUEEN)    return _uci_move<QUEEN>(from, to);
-            if (flag == ROOK)     return _uci_move<ROOK>(from, to);
-            if (flag == BISHOP)   return _uci_move<BISHOP>(from, to);
-            if (flag == KNIGHT)   return _uci_move<KNIGHT>(from, to);
-        }
+        if (flag == QP_FLAG) return _uci_move<QUEEN>(from, to);
+        if (flag == RP_FLAG) return _uci_move<ROOK>(from, to);
+        if (flag == BP_FLAG) return _uci_move<BISHOP>(from, to);
+        if (flag == NP_FLAG) return _uci_move<KNIGHT>(from, to);
 
-        if (flag & 0b1000) {
-            if (from == "e1" && to == "g1")   return _uci_move<WHITE_OO>();
-            if (from == "e1" && to == "c1")   return _uci_move<WHITE_OOO>();
+        if (flag & CS_FLAG) {
+            if (from == "e1" && to == "g1") return _uci_move<WHITE_OO>();
+            if (from == "e1" && to == "c1") return _uci_move<WHITE_OOO>();
             if (from == "e8" && to == "g8") return _uci_move<BLACK_OO>();
             if (from == "e8" && to == "c8") return _uci_move<BLACK_OOO>();
         }
@@ -171,21 +167,31 @@ namespace ZeroLogic::Misc{
     }
     PositionToTemplate(moves, std::string, std::istringstream*)
 
+    Depth allowed = 0;
+    Depth recursion = 0;
 
     template<Color c>
     static std::string uci_pv(Position<c> pos){
         u32 key = *pos.hash;
         Move mov = Search::TT::table[key].move;
+        if (recursion++ > allowed) return "";
 
         if (Search::TT::table[key].hash == pos.hash && Mfrom(mov) != Mto(mov))
             return " " + uci_move(mov) + standaloneMoves(pos, Mfrom(mov), Mto(mov), getPromo(mov));
         return "";
     }
 
-    static std::string uci_eval(Value val){
+    template<Color c>
+    static std::string uci_pv(Position<c>& pos, Depth d){
+        allowed = Depth(2 * d);
+        recursion = 0;
+        return uci_pv(pos);
+    }
+
+    static std::string uci_eval(Value val, Depth d){
         std::stringstream output;
-        if      (val >= 30000)   output << "mate "  << ceil(double(MATE_POS - val)/2);
-        else if (val <= -30000)   output << "mate "  << ceil(double(MATE_NEG - val)/2);
+        if      (val >= 30000)   output << "mate "  << ceil(double(d - (MATE_POS - val))/2);
+        else if (val <= -30000)   output << "mate "  << ceil(double(-d - (MATE_NEG - val))/2);
         else                        output << "cp "    << val;
         return output.str();
     }

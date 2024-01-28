@@ -11,7 +11,7 @@ namespace ZeroLogic::Perft::TT{
     struct entry{
         Hash hash{0};
         u32 nodecount{};
-        u8 depth{};
+        Depth d{};
     };
 
     entry* table;
@@ -19,7 +19,7 @@ namespace ZeroLogic::Perft::TT{
     void init(u32 size = key_mask){
         table = (entry*) calloc(size, sizeof(entry));
         for (u32 s = 0; s <= size; s++)
-            table[s].depth = 0xff;
+            table[s].d = 0x7f;
         key_mask = size;
     }
     void clear(){
@@ -35,16 +35,10 @@ namespace ZeroLogic::Search::TT {
     // 1111    (4) - flags
     // 111111  (6) - from
 
-    // 1000 - castles
-    // 0001 - rook promotion
-    // 0010 - knight promotion
-    // 0011 - bishop promotion
-    // 0100 - queen promotion
-
     struct entry{
         Hash hash{0};
         Move move{};
-        u8 depth{};
+        Depth d{};
     };
     entry* table;
 
@@ -57,7 +51,7 @@ namespace ZeroLogic::Search::TT {
     }
 
     inline void replace(entry entry){
-        if (entry.depth >= table[*entry.hash].depth && entry.move)
+        if (entry.d >= table[*entry.hash].d && entry.move)
             table[*entry.hash] = entry;
     }
 

@@ -50,6 +50,7 @@ namespace ZeroLogic{
     using Bit = u64;
     using Square = u8;
     using Move = u16;
+    using Depth = s8;
 
     enum SquareWrap : Square{};
 
@@ -103,6 +104,27 @@ namespace ZeroLogic{
         NON_CAPTURE = -50,
         HASHMOVE = 10000
 
+    };
+
+    enum Flags : Move{
+        FLAG = 0b1111 << 6,
+
+        PR_FLAG = 0b1000 << 6,
+        QP_FLAG = 0b1100 << 6,
+        BP_FLAG = 0b1011 << 6,
+        NP_FLAG = 0b1010 << 6,
+        RP_FLAG = 0b1001 << 6,
+
+        CS_FLAG = 0b0001 << 6,
+        EP_FLAG = 0b0010 << 6,
+        PP_FLAG = 0b0100 << 6,
+    };
+
+    constexpr Move castlemoves[4] = {
+            (1 << 10)   | 3     | CS_FLAG,
+            (5 << 10)   | 3     | CS_FLAG,
+            (57 << 10)  | 59    | CS_FLAG,
+            (61 << 10)  | 59    | CS_FLAG
     };
 
     enum File{
@@ -190,8 +212,6 @@ constexpr Direction operator >>(Color c, Direction d)
     if (c == WHITE) return d;
     return Direction(-int(d));
 }
-
-constexpr Move operator>>(Piece p, Move m){m |= (p << 6); return m;}
 
 constexpr bool operator==(SquareWrap sq, const char* str)
 {

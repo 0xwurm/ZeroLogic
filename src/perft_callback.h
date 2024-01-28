@@ -72,7 +72,7 @@ namespace ZeroLogic::Perft {
         template <Color c>
         static void _any_move(Position<c>& npos, const u8& depth, u64& partial_nodecount){
             u32 key = *npos.hash;
-            if (TT::table[key].hash == npos.hash && TT::table[key].depth == depth)
+            if (TT::table[key].hash == npos.hash && TT::table[key].d == depth)
             {
                 partial_nodecount += TT::table[key].nodecount;
                 ++tt_hits;
@@ -85,7 +85,7 @@ namespace ZeroLogic::Perft {
                 else                            enumerate<Callback>(npos, new_depth, new_partial_nodecount);
 
                 partial_nodecount += new_partial_nodecount;
-                if (depth < TT::table[key].depth) TT::table[key] = {npos.hash, u32(new_partial_nodecount), depth};
+                if (depth < TT::table[key].d) TT::table[key] = {npos.hash, u32(new_partial_nodecount), depth};
             }
         }
 
@@ -199,7 +199,7 @@ namespace ZeroLogic::Perft {
         template<bool root, bool leaf, Color c>
         static inline void pawn_move(
                 Position<c>& pos,
-                map& pr, map& pl, map& pr_promo, map& pl_promo, map& pf, map& pp, map& pf_promo,
+                map& pr, map& pl, map& pf, map& pp,
                 const u8 depth, u64& partial_nodecount
                 )
         {
@@ -207,8 +207,6 @@ namespace ZeroLogic::Perft {
             {
                 count(pr | pf | pp, partial_nodecount);
                 count(pl, partial_nodecount);
-                count_promo(pr_promo | pf_promo, partial_nodecount);
-                count_promo(pl_promo, partial_nodecount);
             }
             else
             {
@@ -220,25 +218,41 @@ namespace ZeroLogic::Perft {
                     Bit to = PopBit(pl);
                     _silent_move<PAWN, root>(pos, moveP<!c, LEFT>(to), to, depth, partial_nodecount);
                 }
-                while(pr_promo){
-                    Bit to = PopBit(pr_promo);
-                    _promotion_move<root>(pos, moveP<!c, RIGHT>(to), to, depth, partial_nodecount);
-                }
-                while(pl_promo){
-                    Bit to = PopBit(pl_promo);
-                    _promotion_move<root>(pos, moveP<!c, LEFT>(to), to, depth, partial_nodecount);
-                }
                 while(pf){
                     Bit to = PopBit(pf);
                     _silent_move<PAWN, root>(pos, moveP<!c, FORWARD>(to), to, depth, partial_nodecount);
                 }
-                while(pf_promo){
-                    Bit to = PopBit(pf_promo);
-                    _promotion_move<root>(pos, moveP<!c, FORWARD>(to), to, depth, partial_nodecount);
-                }
                 while(pp){
                     Bit to = PopBit(pp);
                     _pawn_push<root>(pos, move<(!c >> FORWARD), 2>(to), to, depth, partial_nodecount);
+                }
+            }
+        }
+        template<bool root, bool leaf, Color c>
+        static inline void promotion_move(
+                Position<c>& pos,
+                map& pr_promo, map& pl_promo, map& pf_promo,
+                Depth d, u64& partial_nodecount
+                )
+        {
+            if constexpr (leaf)
+            {
+                count_promo(pr_promo | pf_promo, partial_nodecount);
+                count_promo(pl_promo, partial_nodecount);
+            }
+            else
+            {
+                while(pr_promo){
+                    Bit to = PopBit(pr_promo);
+                    _promotion_move<root>(pos, moveP<!c, RIGHT>(to), to, d, partial_nodecount);
+                }
+                while(pl_promo){
+                    Bit to = PopBit(pl_promo);
+                    _promotion_move<root>(pos, moveP<!c, LEFT>(to), to, d, partial_nodecount);
+                }
+                while(pf_promo){
+                    Bit to = PopBit(pf_promo);
+                    _promotion_move<root>(pos, moveP<!c, FORWARD>(to), to, d, partial_nodecount);
                 }
             }
         }
