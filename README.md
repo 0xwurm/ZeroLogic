@@ -2,7 +2,7 @@
 
 A simple chess engine for graphing calculators. 
 
-**Latest tests: 2000 elo | 1,800,000,000 nps**
+**Latest tests: 2000 elo | 3,350,000,000 nps**
 
 ## Use
 
@@ -38,13 +38,13 @@ making the Open Source Abstract Movegenerating Algorithm (**OSAMA**) used in thi
 in the world! In the time it takes to calculate one legal position, a photon would travel about 16cm.
 
 ```
-Perft 8:
-Overall nodes: 84,998,978,956
-Time taken: 46.982s
-Mn/s: 1809
-s/Mn: 0.000552746
-light distance equivalent: 0.165709 meters
-tt hits: 129,787,406
+Perft 9:
+Overall nodes: 2,439,530,234,167
+Time taken: 728179
+Mn/s: 3350
+s/Mn: 0.000298492
+light distance equivalent: 0.0894856 meters
+tt hits: 1,137,277,393
 ```
 
 This speed is due to heavy use of function inlining, templates and a transposition table.
